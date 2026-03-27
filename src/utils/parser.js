@@ -29,6 +29,62 @@ const MAX_SENDER_LENGTH = 200; // Sender name length
 const MAX_MESSAGES_PER_FILE = 100000; // Prevent unbounded parsing
 const DEFAULT_PARSE_CHUNK_SIZE = 1200;
 
+const SYSTEM_EVENT_PATTERNS = [
+    /\bturned off disappearing messages\b/i,
+    /\bturned on disappearing messages\b/i,
+    /\bchanged disappearing messages\b/i,
+    /\bmessages? and calls are end-to-end encrypted\b/i,
+    /\bsecurity code changed\b/i,
+    /\badded you\b/i,
+    /\bremoved you\b/i,
+    /\bleft\b/i,
+    /\bjoined using this group's invite link\b/i,
+    /\bcreated group\b/i,
+    /\bchanged the subject\b/i,
+    /\bchanged this group's icon\b/i,
+    /\bdeleted this message\b/i
+];
+
+function normalizeSystemText(text) {
+    const raw = String(text || '').trim();
+    // Some exports wrap system lines with + ... + markers.
+    const wrappedPlus = raw.match(/^\+\s*([\s\S]*?)\s*\+$/);
+    return wrappedPlus ? wrappedPlus[1].trim() : raw;
+}
+
+function shouldCoerceToSystemMessage(sender, message) {
+    const senderText = String(sender || '').trim();
+    const messageText = String(message || '').trim();
+    const combined = `${senderText} ${messageText}`.trim();
+
+    if (!combined) {
+        return false;
+    }
+
+    return SYSTEM_EVENT_PATTERNS.some((pattern) => pattern.test(combined));
+}
+
+function getPendingFromMessageMatch(date, time, sender, message) {
+    if (shouldCoerceToSystemMessage(sender, message)) {
+        const combinedText = [sender, message].filter(Boolean).join(message ? ': ' : '');
+        return {
+            date,
+            time,
+            sender: null,
+            message: normalizeSystemText(combinedText),
+            isSystem: true
+        };
+    }
+
+    return {
+        date,
+        time,
+        sender: sender ? sender.trim() : null,
+        message: message || '',
+        isSystem: false
+    };
+}
+
 function yieldToMainThread() {
     return new Promise((resolve) => {
         if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -137,13 +193,7 @@ function processChatLine(line, state) {
     const msgMatch = line.match(MESSAGE_REGEX);
     if (msgMatch) {
         const finalized = finalizePendingMessage(state.pending, messages, usersSet, parseStats);
-        state.pending = {
-            date: msgMatch[1],
-            time: msgMatch[2],
-            sender: msgMatch[3] ? msgMatch[3].trim() : null,
-            message: msgMatch[4] || '',
-            isSystem: false
-        };
+        state.pending = getPendingFromMessageMatch(msgMatch[1], msgMatch[2], msgMatch[3], msgMatch[4]);
         parseStats.parsed++;
         return finalized;
     }
@@ -151,13 +201,12 @@ function processChatLine(line, state) {
     const bracketedMsgMatch = line.match(BRACKETED_MESSAGE_REGEX);
     if (bracketedMsgMatch) {
         const finalized = finalizePendingMessage(state.pending, messages, usersSet, parseStats);
-        state.pending = {
-            date: bracketedMsgMatch[1],
-            time: bracketedMsgMatch[2],
-            sender: bracketedMsgMatch[3] ? bracketedMsgMatch[3].trim() : null,
-            message: bracketedMsgMatch[4] || '',
-            isSystem: false
-        };
+        state.pending = getPendingFromMessageMatch(
+            bracketedMsgMatch[1],
+            bracketedMsgMatch[2],
+            bracketedMsgMatch[3],
+            bracketedMsgMatch[4]
+        );
         parseStats.parsed++;
         return finalized;
     }
@@ -330,13 +379,7 @@ export function parseWhatsAppChat(rawText) {
         const msgMatch = line.match(MESSAGE_REGEX);
         if (msgMatch) {
             finalizePendingMessage(pending, messages, usersSet, parseStats);
-            pending = {
-                date: msgMatch[1],
-                time: msgMatch[2],
-                sender: msgMatch[3] ? msgMatch[3].trim() : null,
-                message: msgMatch[4] || '',
-                isSystem: false
-            };
+            pending = getPendingFromMessageMatch(msgMatch[1], msgMatch[2], msgMatch[3], msgMatch[4]);
             parseStats.parsed++;
             continue;
         }
@@ -344,13 +387,12 @@ export function parseWhatsAppChat(rawText) {
         const bracketedMsgMatch = line.match(BRACKETED_MESSAGE_REGEX);
         if (bracketedMsgMatch) {
             finalizePendingMessage(pending, messages, usersSet, parseStats);
-            pending = {
-                date: bracketedMsgMatch[1],
-                time: bracketedMsgMatch[2],
-                sender: bracketedMsgMatch[3] ? bracketedMsgMatch[3].trim() : null,
-                message: bracketedMsgMatch[4] || '',
-                isSystem: false
-            };
+            pending = getPendingFromMessageMatch(
+                bracketedMsgMatch[1],
+                bracketedMsgMatch[2],
+                bracketedMsgMatch[3],
+                bracketedMsgMatch[4]
+            );
             parseStats.parsed++;
             continue;
         }
