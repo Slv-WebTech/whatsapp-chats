@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { Virtuoso } from 'react-virtuoso';
 import { toPng } from 'html-to-image';
 import { Download, MessageCircleMore } from 'lucide-react';
 import ChatBubble from './components/ChatBubble';
@@ -362,7 +363,7 @@ function formatLastSeenLabel(value) {
 }
 
 function App() {
-    const PARSE_RENDER_WINDOW = 280;
+    const VIRTUALIZE_THRESHOLD = 350;
     const [chatMode, setChatMode] = useState(() => {
         const saved = localStorage.getItem('whatsapp-chat-mode');
         return saved === 'romantic' ? 'romantic' : 'formal';
@@ -407,6 +408,8 @@ function App() {
     const parseFlushTimerRef = useRef(null);
     const pendingChunkMessagesRef = useRef([]);
     const pendingChunkUsersRef = useRef(new Set());
+    const chatScrollRef = useRef(null);
+    const virtuosoRef = useRef(null);
     const bottomAnchorRef = useRef(null);
     const defaultLoadedRef = useRef(false);
     const touchStartRef = useRef(null);
@@ -417,13 +420,7 @@ function App() {
         [groupedMessages, replayStartIndex]
     );
     const displayedMessages = replayMode ? visibleMessages : groupedMessages;
-    const renderMessages = useMemo(() => {
-        if (!isParsing || replayMode) {
-            return displayedMessages;
-        }
-
-        return displayedMessages.slice(-PARSE_RENDER_WINDOW);
-    }, [displayedMessages, isParsing, replayMode]);
+    const shouldVirtualize = !replayMode && groupedMessages.length > VIRTUALIZE_THRESHOLD;
     const replayDateMarkers = useMemo(
         () =>
             groupedMessages
@@ -595,6 +592,14 @@ function App() {
 
         return groupedMessages.filter((msg) => includesQuery(msg.message, search)).map((msg) => msg.id);
     }, [groupedMessages, replayMode, search]);
+    const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
+    const messageIndexById = useMemo(() => {
+        const indexMap = new Map();
+        groupedMessages.forEach((message, index) => {
+            indexMap.set(message.id, index);
+        });
+        return indexMap;
+    }, [groupedMessages]);
     const activeSearchId = highlightedIds[activeSearchIndex] || null;
 
     useEffect(() => {
@@ -613,14 +618,23 @@ function App() {
 
         const safeIndex = ((nextIndex % highlightedIds.length) + highlightedIds.length) % highlightedIds.length;
         const messageId = highlightedIds[safeIndex];
-        const node = messageRefs.current[messageId];
+        const rowIndex = messageIndexById.get(messageId);
 
-        if (node) {
-            node.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'center' });
+        if (shouldVirtualize && Number.isInteger(rowIndex)) {
+            virtuosoRef.current?.scrollToIndex({
+                index: rowIndex,
+                align: 'center',
+                behavior: shouldReduceMotion ? 'auto' : 'smooth'
+            });
+        } else {
+            const node = messageRefs.current[messageId];
+            if (node) {
+                node.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'center' });
+            }
         }
 
         setActiveSearchIndex(safeIndex);
-    }, [highlightedIds, shouldReduceMotion]);
+    }, [highlightedIds, messageIndexById, shouldReduceMotion, shouldVirtualize]);
 
     useEffect(() => {
         setActiveSearchIndex(0);
@@ -1065,6 +1079,7 @@ function App() {
                         />
 
                         <section
+                            ref={chatScrollRef}
                             className="chat-wallpaper scroll-thin relative flex-1 overflow-x-hidden overflow-y-auto px-2.5 pb-14 pt-4 md:px-6 md:py-6"
                             onTouchStart={handleThemeSwipeStart}
                             onTouchEnd={handleThemeSwipeEnd}
@@ -1152,50 +1167,58 @@ function App() {
                                             </motion.div>
                                         ) : null}
 
-                                        {isParsing ? renderMessages.map((message, index) => {
-                                            const isCurrentUser = currentUser && message.sender === currentUser;
-                                            const showDateChip = shouldRenderDateChip(renderMessages, index);
-                                            const sourceIndex = groupedMessages.findIndex((item) => item.id === message.id);
+                                        {shouldVirtualize ? (
+                                            <Virtuoso
+                                                ref={virtuosoRef}
+                                                data={displayedMessages}
+                                                customScrollParent={chatScrollRef.current || undefined}
+                                                overscan={500}
+                                                increaseViewportBy={{ top: 800, bottom: 1200 }}
+                                                itemContent={(index, message) => {
+                                                    const isCurrentUser = currentUser && message.sender === currentUser;
+                                                    const showDateChip = shouldRenderDateChip(displayedMessages, index);
 
-                                            return (
-                                                <div key={`${message.id}-wrapper`}>
-                                                    {showDateChip ? (
-                                                        <div className="my-2.5 flex justify-center">
-                                                            <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
-                                                                {message.date}
-                                                            </span>
+                                                    return (
+                                                        <div className="px-1">
+                                                            {showDateChip ? (
+                                                                <div className="my-2.5 flex justify-center">
+                                                                    <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
+                                                                        {message.date}
+                                                                    </span>
+                                                                </div>
+                                                            ) : null}
+
+                                                            <ChatBubble
+                                                                message={message}
+                                                                isCurrentUser={isCurrentUser}
+                                                                avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
+                                                                query={search}
+                                                                isMatch={highlightedIdSet.has(message.id) || activeSearchId === message.id}
+                                                                animateEntry={false}
+                                                                onReplayFrom={() => {
+                                                                    const nextIndex = Math.max(index, 0);
+                                                                    setReplaySegment('from-here');
+                                                                    setScrubValue(nextIndex);
+                                                                    startReplay(nextIndex);
+                                                                }}
+                                                                messageRef={(node) => {
+                                                                    if (node) {
+                                                                        messageRefs.current[message.id] = node;
+                                                                    }
+                                                                }}
+                                                            />
                                                         </div>
-                                                    ) : null}
-
-                                                    <ChatBubble
-                                                        message={message}
-                                                        isCurrentUser={isCurrentUser}
-                                                        avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
-                                                        query={search}
-                                                        isMatch={false}
-                                                        animateEntry={false}
-                                                        onReplayFrom={() => {
-                                                            const nextIndex = Math.max(sourceIndex, 0);
-                                                            setReplaySegment('from-here');
-                                                            setScrubValue(nextIndex);
-                                                            startReplay(nextIndex);
-                                                        }}
-                                                        messageRef={(node) => {
-                                                            if (node) {
-                                                                messageRefs.current[message.id] = node;
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                            );
-                                        }) : (
+                                                    );
+                                                }}
+                                            />
+                                        ) : (
                                             <AnimatePresence initial={false} mode="popLayout">
                                                 {displayedMessages.map((message, index) => {
-                                            const isCurrentUser = currentUser && message.sender === currentUser;
-                                            const isMatch = highlightedIds.includes(message.id);
-                                            const showDateChip = shouldRenderDateChip(displayedMessages, index);
+                                                    const isCurrentUser = currentUser && message.sender === currentUser;
+                                                    const isMatch = highlightedIds.includes(message.id);
+                                                    const showDateChip = shouldRenderDateChip(displayedMessages, index);
 
-                                            const sourceIndex = groupedMessages.findIndex((item) => item.id === message.id);
+                                                    const sourceIndex = groupedMessages.findIndex((item) => item.id === message.id);
 
                                                     return (
                                                         <motion.div
@@ -1205,46 +1228,38 @@ function App() {
                                                             animate={{ opacity: 1, y: 0 }}
                                                             transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.25, ease: 'easeOut' }}
                                                         >
-                                                    {showDateChip ? (
-                                                        <motion.div layout={!shouldReduceMotion} className="my-2.5 flex justify-center">
-                                                            <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
-                                                                {message.date}
-                                                            </span>
-                                                        </motion.div>
-                                                    ) : null}
+                                                            {showDateChip ? (
+                                                                <motion.div layout={!shouldReduceMotion} className="my-2.5 flex justify-center">
+                                                                    <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
+                                                                        {message.date}
+                                                                    </span>
+                                                                </motion.div>
+                                                            ) : null}
 
-                                                    <ChatBubble
-                                                        message={message}
-                                                        isCurrentUser={isCurrentUser}
-                                                        avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
-                                                        query={search}
-                                                        isMatch={isMatch || activeSearchId === message.id}
-                                                        animateEntry={replayMode}
-                                                        onReplayFrom={() => {
-                                                            const nextIndex = Math.max(sourceIndex, 0);
-                                                            setReplaySegment('from-here');
-                                                            setScrubValue(nextIndex);
-                                                            startReplay(nextIndex);
-                                                        }}
-                                                        messageRef={(node) => {
-                                                            if (node) {
-                                                                messageRefs.current[message.id] = node;
-                                                            }
-                                                        }}
-                                                    />
+                                                            <ChatBubble
+                                                                message={message}
+                                                                isCurrentUser={isCurrentUser}
+                                                                avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
+                                                                query={search}
+                                                                isMatch={isMatch || activeSearchId === message.id}
+                                                                animateEntry={replayMode}
+                                                                onReplayFrom={() => {
+                                                                    const nextIndex = Math.max(sourceIndex, 0);
+                                                                    setReplaySegment('from-here');
+                                                                    setScrubValue(nextIndex);
+                                                                    startReplay(nextIndex);
+                                                                }}
+                                                                messageRef={(node) => {
+                                                                    if (node) {
+                                                                        messageRefs.current[message.id] = node;
+                                                                    }
+                                                                }}
+                                                            />
                                                         </motion.div>
                                                     );
                                                 })}
                                             </AnimatePresence>
                                         )}
-
-                                        {isParsing && groupedMessages.length > PARSE_RENDER_WINDOW ? (
-                                            <div className="my-2 flex justify-center">
-                                                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
-                                                    Showing latest {PARSE_RENDER_WINDOW} while parsing for smoother UI
-                                                </span>
-                                            </div>
-                                        ) : null}
                                     </>
                                 )}
                             </div>
