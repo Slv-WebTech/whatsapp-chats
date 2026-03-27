@@ -13,6 +13,7 @@ Your WhatsApp Chat UI includes **AI-powered conversation summarization** with in
 **Function**: `summarizeMessagesWithAI(messages)`
 
 **Features**:
+
 - ✅ Integrates with OpenAI API (GPT-4o-mini)
 - ✅ Processes last 150 messages for context
 - ✅ Returns structured summary with:
@@ -28,6 +29,7 @@ Your WhatsApp Chat UI includes **AI-powered conversation summarization** with in
 **Function**: `createLocalSummary(messages)`
 
 **Features**:
+
 - ✅ Works without any API keys
 - ✅ Analyzes conversation tone (positive/negative/neutral)
 - ✅ Identifies most active participant
@@ -35,6 +37,7 @@ Your WhatsApp Chat UI includes **AI-powered conversation summarization** with in
 - ✅ Samples recent messages
 
 **Fallback Triggers**:
+
 - No OpenAI API key provided
 - API request fails
 - API response is invalid
@@ -44,6 +47,7 @@ Your WhatsApp Chat UI includes **AI-powered conversation summarization** with in
 **Location**: [src/App.js](src/App.js#L1156)
 
 **Features**:
+
 - Generate button (disabled when no messages)
 - Loading state during summarization
 - Display formatted summary output
@@ -56,6 +60,7 @@ Your WhatsApp Chat UI includes **AI-powered conversation summarization** with in
 ### Option 1: With OpenAI API (Recommended)
 
 **Step 1**: Get OpenAI API Key
+
 ```
 1. Go to https://platform.openai.com/account/api-keys
 2. Create new API key
@@ -63,11 +68,13 @@ Your WhatsApp Chat UI includes **AI-powered conversation summarization** with in
 ```
 
 **Step 2**: Create `.env.local` in project root
+
 ```bash
 VITE_OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
 ```
 
 **Step 3**: Restart dev server
+
 ```bash
 npm run dev
 ```
@@ -83,6 +90,7 @@ If you don't provide an API key, the local summarizer automatically activates. N
 ### Test 1: Local Summary (No API Key Required)
 
 **Steps**:
+
 1. ✅ Ensure no `VITE_OPENAI_API_KEY` is set
 2. ✅ Open the chat UI
 3. ✅ Import a sample chat file or use existing messages
@@ -90,6 +98,7 @@ If you don't provide an API key, the local summarizer automatically activates. N
 5. ✅ Click **Generate** button
 
 **Expected Output**:
+
 ```
 Total messages: 45
 Most active user: Alice
@@ -103,10 +112,12 @@ Sample recent messages:
 ### Test 2: AI Summary (With OpenAI API Key)
 
 **Prerequisites**:
+
 - Valid OpenAI API key in `.env.local`
 - ⚠️ **NOTE**: OpenAI API requires paid account (free tier has limited quota)
 
 **Steps**:
+
 1. ✅ Set `VITE_OPENAI_API_KEY` in `.env.local`
 2. ✅ Restart npm dev server
 3. ✅ Open the chat UI
@@ -116,6 +127,7 @@ Sample recent messages:
 7. ✅ Wait for "Summarizing…" to complete
 
 **Expected Output** (AI Generated):
+
 ```
 Key Topics Discussed:
 - Project completion and timeline
@@ -138,6 +150,7 @@ Action Points:
 ### Test 3: Error Handling
 
 **Test 3a: Invalid API Key**
+
 ```
 1. Set VITE_OPENAI_API_KEY=invalid-key-xxx
 2. Click Generate
@@ -145,6 +158,7 @@ Action Points:
 ```
 
 **Test 3b: No Messages**
+
 ```
 1. Clear chat messages
 2. Click Generate button
@@ -152,6 +166,7 @@ Action Points:
 ```
 
 **Test 3c: API Timeout**
+
 ```
 1. Set API key
 2. Disable internet connection
@@ -187,6 +202,7 @@ Is VITE_OPENAI_API_KEY set?
 **Location**: [src/utils/aiSummary.js](src/utils/aiSummary.js#L27)
 
 **Fix Required**:
+
 ```javascript
 // Change from:
 model: 'gpt-4.1-mini',
@@ -210,15 +226,15 @@ The fallback mechanism is excellent - app works perfectly without API key!
 
 ## 📈 Testing Results
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Local Summary | ✅ Ready | Works without API key |
-| Tone Detection | ✅ Ready | Positive/negative/neutral detection |
-| User Activity | ✅ Ready | Counts messages per user |
-| OpenAI Integration | ⚠️ Needs Fix | Model name needs correction |
-| UI Controls | ✅ Ready | Generate button, loading state, display |
-| Error Handling | ✅ Good | Graceful fallback on errors |
-| Configuration | ✅ Ready | Uses VITE env variable |
+| Component          | Status       | Notes                                   |
+| ------------------ | ------------ | --------------------------------------- |
+| Local Summary      | ✅ Ready     | Works without API key                   |
+| Tone Detection     | ✅ Ready     | Positive/negative/neutral detection     |
+| User Activity      | ✅ Ready     | Counts messages per user                |
+| OpenAI Integration | ⚠️ Needs Fix | Model name needs correction             |
+| UI Controls        | ✅ Ready     | Generate button, loading state, display |
+| Error Handling     | ✅ Good      | Graceful fallback on errors             |
+| Configuration      | ✅ Ready     | Uses VITE env variable                  |
 
 ---
 
@@ -231,6 +247,7 @@ The AI summarization will work on GitHub Pages with one caveat:
 **NEVER commit API keys to Git!**
 
 Instead:
+
 1. ✅ Use GitHub Secrets for deployment API keys
 2. ✅ Add to `.gitignore`: `.env.local`, `.env*`
 3. ✅ For GitHub Pages: OpenAI calls happen in browser, so API key would be exposed
@@ -241,12 +258,13 @@ Instead:
 ## 📚 Usage Examples
 
 ### Example 1: Simple Summary
+
 ```javascript
-import { summarizeMessagesWithAI } from './utils/aiSummary';
+import { summarizeMessagesWithAI } from "./utils/aiSummary";
 
 const messages = [
-  { sender: 'Alice', message: 'Hey!', date: '2024-01-01', time: '10:00' },
-  { sender: 'Bob', message: 'Hi there!', date: '2024-01-01', time: '10:05' }
+  { sender: "Alice", message: "Hey!", date: "2024-01-01", time: "10:00" },
+  { sender: "Bob", message: "Hi there!", date: "2024-01-01", time: "10:05" },
 ];
 
 const summary = await summarizeMessagesWithAI(messages);
@@ -254,6 +272,7 @@ console.log(summary);
 ```
 
 ### Example 2: Local Summary Only
+
 ```javascript
 import { createLocalSummary } from './utils/localSummary';
 
@@ -299,6 +318,7 @@ echo ".env.local" >> .gitignore
 ```
 
 **For Production**: Use a backend API proxy to keep API key server-side:
+
 ```
 Browser → Your Backend → OpenAI API
 ```
