@@ -165,12 +165,6 @@ function processChatLine(line, state) {
     const sysMatch = line.match(SYSTEM_REGEX);
     if (sysMatch) {
         const maybeMessage = sysMatch[3] || '';
-        if (maybeMessage.includes(':')) {
-            if (state.pending && state.pending.message.length < MAX_PENDING_MESSAGE_LENGTH) {
-                state.pending.message += `\n${line}`;
-            }
-            return null;
-        }
 
         const finalized = finalizePendingMessage(state.pending, messages, usersSet, parseStats);
         state.pending = {
@@ -187,12 +181,6 @@ function processChatLine(line, state) {
     const bracketedSysMatch = line.match(BRACKETED_SYSTEM_REGEX);
     if (bracketedSysMatch) {
         const maybeMessage = bracketedSysMatch[3] || '';
-        if (maybeMessage.includes(':')) {
-            if (state.pending && state.pending.message.length < MAX_PENDING_MESSAGE_LENGTH) {
-                state.pending.message += `\n${line}`;
-            }
-            return null;
-        }
 
         const finalized = finalizePendingMessage(state.pending, messages, usersSet, parseStats);
         state.pending = {
@@ -370,12 +358,6 @@ export function parseWhatsAppChat(rawText) {
         const sysMatch = line.match(SYSTEM_REGEX);
         if (sysMatch) {
             const maybeMessage = sysMatch[3] || '';
-            if (maybeMessage.includes(':')) {
-                if (pending && pending.message.length < MAX_PENDING_MESSAGE_LENGTH) {
-                    pending.message += `\n${line}`;
-                }
-                continue;
-            }
 
             finalizePendingMessage(pending, messages, usersSet, parseStats);
             pending = {
@@ -392,12 +374,6 @@ export function parseWhatsAppChat(rawText) {
         const bracketedSysMatch = line.match(BRACKETED_SYSTEM_REGEX);
         if (bracketedSysMatch) {
             const maybeMessage = bracketedSysMatch[3] || '';
-            if (maybeMessage.includes(':')) {
-                if (pending && pending.message.length < MAX_PENDING_MESSAGE_LENGTH) {
-                    pending.message += `\n${line}`;
-                }
-                continue;
-            }
 
             finalizePendingMessage(pending, messages, usersSet, parseStats);
             pending = {
