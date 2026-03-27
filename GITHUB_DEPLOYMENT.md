@@ -5,6 +5,7 @@
 Your project has been initialized with Git and is ready to push to GitHub.
 
 **Repository Details:**
+
 - **GitHub Profile**: Slv-WebTech
 - **Repository Name**: whatsapp-chats
 - **URL**: https://github.com/Slv-WebTech/whatsapp-chats
@@ -29,12 +30,14 @@ Your project has been initialized with Git and is ready to push to GitHub.
 Choose one of these methods:
 
 #### Option A: GitHub CLI (Recommended)
+
 ```bash
 gh auth login
 # Follow the prompts to authenticate
 ```
 
 #### Option B: SSH Keys
+
 ```bash
 # Generate SSH key (if you don't have one)
 ssh-keygen -t ed25519 -C "your-email@example.com"
@@ -46,6 +49,7 @@ ssh-keygen -t ed25519 -C "your-email@example.com"
 ```
 
 #### Option C: Personal Access Token
+
 ```bash
 # Create a token at: https://github.com/settings/tokens
 # Store it securely for use with HTTPS authentication
@@ -60,11 +64,13 @@ git push -u origin main
 ```
 
 **What this does:**
+
 - `-u` flag sets origin/main as the default upstream
 - Pushes all commits to the main branch
 - First push may take a minute or two depending on internet speed
 
 **Example Output:**
+
 ```
 Enumerating objects: 45, done.
 Counting objects: 100% (45/45), done.
@@ -81,6 +87,7 @@ Branch 'main' is set to track remote branch 'main' from 'origin'.
 ## After Pushing
 
 ### Verify on GitHub
+
 1. Visit https://github.com/Slv-WebTech/whatsapp-chats
 2. You should see all your files and commits
 3. README.md will be displayed on the repository homepage
@@ -88,24 +95,29 @@ Branch 'main' is set to track remote branch 'main' from 'origin'.
 ### Set Up Additional Features
 
 #### Add GitHub Pages (Optional - for live demo)
+
 1. Go to Repository Settings → Pages
 2. Select "Deploy from a branch"
 3. Choose branch: `main`, folder: `/dist`
 4. Your site will be live at: https://slv-webtech.github.io/whatsapp-chats/
 
 #### Add GitHub Actions (CI/CD - Already configured)
+
 The project includes `.github/workflows/deploy.yml` for:
+
 - Automatic builds on push
 - Running tests
 - Building for production
 
 #### Add Topics (for discoverability)
+
 1. Go to Repository Settings
 2. Add topics: `react`, `whatsapp`, `chat-ui`, `tailwind`, `vite`
 
 ## Future Updates & Maintenance
 
 ### Making Changes
+
 ```bash
 # After making changes:
 git add .
@@ -114,6 +126,7 @@ git push
 ```
 
 ### Creating Feature Branches
+
 ```bash
 # Create and switch to new branch
 git checkout -b feature/your-feature-name
@@ -145,12 +158,15 @@ npm run preview
 ## Recommended GitHub Settings
 
 ### Branch Protection (Settings → Branches)
+
 - Require pull request reviews before merging
 - Require branches to be up to date before merging
 - Require status checks to pass
 
 ### Release Tags
+
 Create releases for major versions:
+
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
@@ -159,14 +175,17 @@ git push origin v1.0.0
 ## Troubleshooting
 
 ### "Permission denied (publickey)"
+
 - Set up SSH keys or use HTTPS with personal access token
 - Or switch remote URL: `git remote set-url origin https://github.com/Slv-WebTech/whatsapp-chats.git`
 
 ### "Failed to authenticate"
+
 - Ensure credentials are saved in GitHub CLI or system keychain
 - For HTTPS: Use GitHub personal access token as password
 
 ### First push takes forever
+
 - Large node_modules files are gitignored (check .gitignore)
 - .dist folder will be gitignored if in production
 
@@ -182,6 +201,7 @@ git push origin v1.0.0
 ## Support
 
 Your project is now on GitHub! You can:
+
 - Share the repository URL with others
 - Enable Issues for bug reports
 - Enable Discussions for community chat
