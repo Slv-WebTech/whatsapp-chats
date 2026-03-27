@@ -38,10 +38,10 @@ function ChatHeader({
         <motion.header
             initial={shouldReduceMotion ? false : { opacity: 0, y: -8 }}
             animate={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
-            className="sticky top-0 z-20 min-h-[3.2rem] border-b border-white/45 bg-white/52 px-2.5 py-1.5 text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.08)] dark:border-slate-700/50 dark:bg-slate-950/42 dark:text-slate-100 md:min-h-14 md:px-3.5 xl:px-4"
+            className="chat-header sticky top-0 z-20 min-h-[3.2rem] border-b border-white/45 bg-white/52 px-2.5 py-1.5 text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.08)] dark:border-slate-700/50 dark:bg-slate-950/42 dark:text-slate-100 md:min-h-14 md:px-3.5 xl:px-4"
         >
-            <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-1.5">
+            <div className="chat-header__content flex flex-col gap-1.5">
+                <div className="chat-header__row flex items-center justify-between gap-1.5">
                     <div className="min-w-0 flex items-center gap-1.5">
                         <img
                             src={avatar || 'https://i.pravatar.cc/100?img=12'}
@@ -50,7 +50,7 @@ function ChatHeader({
                         />
                         <div className="min-w-0">
                             <h3 className="truncate text-[0.86rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[0.92rem] lg:text-[0.96rem]">{title || 'Chat'}</h3>
-                            <p className="inline-flex max-w-full items-center gap-1 truncate text-[10px] text-slate-500 dark:text-slate-300 lg:gap-1.5 lg:text-[11px]">
+                            <p className="chat-header__status inline-flex max-w-full items-center gap-1 truncate text-[10px] text-slate-500 dark:text-slate-300 lg:gap-1.5 lg:text-[11px]">
                                 <Lock size={12} />
                                 {statusLine}
                             </p>
@@ -64,7 +64,7 @@ function ChatHeader({
                         <span>{contactMeta?.activeDayCount || 0} active days</span>
                     </div>
 
-                    <div className="flex items-center gap-1 lg:gap-1.5">
+                    <div className="chat-header__actions flex items-center gap-1 lg:gap-1.5">
                         <Button type="button" variant="ghost" size="icon" className="header-icon-button hidden h-10 w-10 md:inline-flex md:h-[2.35rem] md:w-[2.35rem]" aria-label="Video call preview">
                             <Video size={16} />
                         </Button>
@@ -168,7 +168,7 @@ function ChatHeader({
                 </div>
 
                 {showSearch ? (
-                    <div className="flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/70 px-1.5 py-1 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/55 lg:gap-1.5">
+                    <div className="chat-header__search flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/70 px-1.5 py-1 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/55 lg:gap-1.5">
                         <Search size={15} className="text-slate-500 dark:text-slate-300" />
                         <Input
                             value={search}

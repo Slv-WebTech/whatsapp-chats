@@ -128,9 +128,9 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                 layout={!reduceMotion}
                 initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="my-2 flex justify-center px-2 text-center text-[11px] text-[var(--text-muted)] md:px-4"
+                className="my-2 flex justify-center px-1.5 text-center text-[10.5px] text-[var(--text-muted)] sm:px-2 md:px-4 md:text-[11px]"
             >
-                <span className="system-message-chip inline-flex w-fit max-w-[96%] items-start gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--system-chip)] px-3.5 py-1 leading-5 shadow md:max-w-[86%]">
+                <span className="system-message-chip inline-flex w-fit max-w-[98%] items-center gap-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--system-chip)] px-2.5 py-1 leading-[1.2rem] shadow sm:max-w-[94%] sm:gap-1.5 sm:px-3 sm:leading-5 md:max-w-[86%] md:px-3.5">
                     <Info size={12} className="system-message-chip__icon" />
                     <span className="system-message-chip__text">{message.message}</span>
                 </span>
@@ -184,7 +184,7 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                 type="button"
                 onClick={onReplayFrom}
                 className={clsx(
-                    `premium-message-bubble relative max-w-[85%] border px-2.5 py-1.5 text-left shadow-sm transition-all duration-200 hover:shadow-md md:max-w-[70%] md:px-3 md:py-2 ${bubbleColor} ${baseRadius} ${radiusClass} ${tailClass}`,
+                    `premium-message-bubble relative max-w-[89%] border px-2.5 py-1.5 text-left shadow-sm transition-all duration-200 hover:shadow-md sm:max-w-[85%] md:max-w-[70%] md:px-3 md:py-2 ${bubbleColor} ${baseRadius} ${radiusClass} ${tailClass}`,
                     isCurrentUser ? 'text-white' : 'text-[var(--text-main)]',
                     isMatch && 'ring-2 ring-yellow-300/80'
                 )}

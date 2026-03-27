@@ -747,6 +747,130 @@ body {
     }
 }
 
+@media (max-width: 360px) {
+    .chat-header {
+        min-height: 3rem;
+        padding: 0.32rem 0.45rem;
+    }
+
+    .chat-header__content {
+        gap: 0.28rem;
+    }
+
+    .chat-header__row {
+        gap: 0.45rem;
+    }
+
+    .chat-header__status {
+        font-size: 9px;
+    }
+
+    .chat-header__actions {
+        gap: 0.3rem;
+    }
+
+    .header-icon-button {
+        height: 2rem;
+        width: 2rem;
+        border-radius: 0.76rem;
+    }
+
+    .chat-header__search {
+        padding: 0.18rem 0.28rem;
+    }
+
+    .replay-bar {
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
+        padding-top: 0.3rem;
+        padding-bottom: 0.3rem;
+    }
+
+    .replay-scrubber {
+        border-radius: 0.75rem;
+        padding: 0.52rem;
+    }
+
+    .timeline-shell {
+        padding-top: 1.95rem;
+    }
+
+    .timeline-marker-row {
+        top: 1.35rem;
+    }
+
+    .timeline-mobile-controls {
+        gap: 0.25rem;
+    }
+
+    .timeline-select {
+        min-width: 3.45rem;
+        padding: 0.2rem 0.26rem;
+        font-size: 0.54rem;
+    }
+
+    .timeline-chip-toggle {
+        gap: 0.2rem;
+        padding: 0.14rem 0.32rem;
+        font-size: 0.52rem;
+    }
+
+    .chat-wallpaper {
+        padding-left: 0.35rem !important;
+        padding-right: 0.35rem !important;
+        padding-top: 0.45rem !important;
+        padding-bottom: 3rem !important;
+    }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+    .chat-header {
+        min-height: 2.7rem;
+        padding-top: 0.28rem;
+        padding-bottom: 0.28rem;
+    }
+
+    .chat-header__content {
+        gap: 0.25rem;
+    }
+
+    .chat-header__status {
+        display: none;
+    }
+
+    .chat-header__search {
+        padding-top: 0.14rem;
+        padding-bottom: 0.14rem;
+    }
+
+    .replay-bar {
+        padding-top: 0.2rem;
+        padding-bottom: 0.2rem;
+    }
+
+    .replay-scrubber {
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+    }
+
+    .timeline-toolbar,
+    .timeline-mobile-controls {
+        margin-bottom: 0.35rem;
+    }
+
+    .timeline-shell {
+        padding-top: 1.8rem;
+    }
+
+    .timeline-marker-row {
+        top: 1.2rem;
+    }
+
+    .timeline-preview__meta {
+        display: none;
+    }
+}
+
 .premium-chip {
     display: inline-flex;
     align-items: center;
@@ -827,6 +951,25 @@ body {
     overflow-wrap: anywhere;
     word-break: normal;
     line-height: 1.3;
+}
+
+@media (max-width: 640px) {
+    .system-message-chip {
+        border-radius: 1rem;
+    }
+
+    .system-message-chip__icon {
+        margin-top: 0;
+        width: 11px;
+        height: 11px;
+    }
+
+    .system-message-chip__text {
+        display: inline-block;
+        max-width: 100%;
+        line-height: 1.25;
+        text-wrap: pretty;
+    }
 }
 
 [data-theme='dark'] .system-message-chip {
