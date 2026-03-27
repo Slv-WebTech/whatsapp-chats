@@ -34,7 +34,7 @@ const DEFAULT_USER_PROFILE_IMAGES = [
     'https://i.pinimg.com/474x/fc/cf/c2/fccfc2da1666f953e74e52141cd04776.jpg'
 ];
 
-const DEFAULT_HEADER_CONTACT_IMAGE = 'https://img.freepik.com/free-photo/silhouetted-couple-sit-bench-autumn-tree-generative-ai_188544-12574.jpg';
+const DEFAULT_HEADER_CONTACT_IMAGE = 'https://wallpapercave.com/wp/wp2746574.jpg';
 
 const PRESET_CHAT_BACKGROUNDS = [
     {
@@ -366,11 +366,11 @@ function App() {
     const VIRTUALIZE_THRESHOLD = 350;
     const [chatMode, setChatMode] = useState(() => {
         const saved = localStorage.getItem('whatsapp-chat-mode');
-        return saved === 'romantic' ? 'romantic' : 'formal';
+        return saved === 'formal' ? 'formal' : 'romantic';
     });
     const [themePreference, setThemePreference] = useState(() => {
         const saved = localStorage.getItem('whatsapp-theme');
-        return ['light', 'dark', 'system'].includes(saved || '') ? saved : 'system';
+        return ['light', 'dark', 'system'].includes(saved || '') ? saved : 'light';
     });
     const [prefersDark, setPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
     const [messages, setMessages] = useState([]);
