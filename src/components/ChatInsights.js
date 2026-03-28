@@ -91,7 +91,7 @@ export function ChatInsights(props) {
         }));
 
     return (
-        <div className="space-y-6 p-6 pb-20">
+        <div className="space-y-6 p-4 pb-32">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Chat Insights</h1>
                 <p className="text-slate-600 dark:text-slate-400">
