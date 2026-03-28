@@ -1868,11 +1868,15 @@ function App() {
     const handleLiveDraftChange = (nextValue) => {
         setDraftMessage(nextValue);
 
-        if (!firebaseReady || !userId || roomDataClearedRef.current) {
+        if (!firebaseReady || !userId) {
             return;
         }
 
         const typing = Boolean(nextValue.trim());
+
+        if (typing && roomDataClearedRef.current) {
+            roomDataClearedRef.current = false;
+        }
 
         // If cleared to empty — immediately mark not typing
         if (!typing) {
@@ -2276,7 +2280,7 @@ function App() {
 
     if (firebaseReady && !authReady) {
         return (
-            <div className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4">
+            <div className="relative flex min-h-screen h-[100dvh] w-full items-center justify-center overflow-hidden px-4">
                 <div className="hero-orb left-[-90px] top-[8%] h-56 w-56 bg-slate-300/30" />
                 <div className="hero-orb right-[-70px] top-[18%] h-72 w-72 bg-slate-400/25" />
                 <div className="glass-panel rounded-[1.2rem] px-6 py-4 text-sm text-[var(--text-main)]">Signing in anonymously...</div>
@@ -2285,7 +2289,7 @@ function App() {
     }
 
     return (
-        <div className="relative flex h-screen w-full flex-col overflow-hidden">
+        <div className="relative flex min-h-screen h-[100dvh] w-full flex-col overflow-hidden">
             <div className="hero-orb left-[-90px] top-[8%] h-56 w-56 bg-slate-300/30" />
             <div className="hero-orb right-[-70px] top-[18%] h-72 w-72 bg-slate-400/25" />
 

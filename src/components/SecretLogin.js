@@ -29,7 +29,7 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
     };
 
     return (
-        <div className="relative flex h-screen w-full items-center justify-center overflow-hidden px-4">
+        <div className="relative flex min-h-screen h-[100dvh] w-full items-center justify-center overflow-hidden px-4">
             <motion.div
                 aria-hidden="true"
                 initial={{ opacity: 0.42, scale: 1.02 }}
@@ -82,11 +82,11 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                     <CardContent className="p-5 sm:p-6">
                         <div className="mb-4 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
-                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 shadow-[0_8px_22px_rgba(16,185,129,0.22)]">
-                                <ShieldCheck size={18} />
-                            </span>
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">Private Access</p>
+                                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 shadow-[0_8px_22px_rgba(16,185,129,0.22)]">
+                                    <ShieldCheck size={18} />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">Private Access</p>
                                     <h1 className="text-lg font-semibold text-[var(--text-main)]">Encrypted Chat</h1>
                                 </div>
                             </div>
