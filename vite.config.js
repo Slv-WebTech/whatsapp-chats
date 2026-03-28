@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const envBase = process.env.VITE_BASE_PATH;
-    const base = envBase || (mode === 'production' ? '/whatsapp-chats/' : '/');
+    const base = envBase || '/';
     const appVersion = process.env.npm_package_version || '0.0.0';
 
     return {
