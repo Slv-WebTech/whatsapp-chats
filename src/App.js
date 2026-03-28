@@ -52,6 +52,7 @@ import {
     setLastRoomId,
     setThemePreference
 } from './store/appSessionSlice';
+import { persistor } from './store/store';
 
 const DEFAULT_CHAT_BACKGROUND = {
     formal: {
@@ -909,6 +910,16 @@ function App() {
         return () => {
             cancelled = true;
         };
+    }, [firebaseReady]);
+
+    useEffect(() => {
+        if (firebaseReady) {
+            return;
+        }
+
+        setFirebaseError(
+            'Firebase is not configured in this deployed build. .env files are not accessible at runtime on GitHub Pages; VITE_FIREBASE_* must be provided at build/deploy time.'
+        );
     }, [firebaseReady]);
 
     useEffect(() => {
@@ -1789,8 +1800,30 @@ function App() {
         setError('');
         setAuthError('');
         setFirebaseError('');
+        setStatusMessage('');
         resetRoomTimelineState();
         dispatch(clearAuthSession());
+
+        try {
+            await persistor.purge();
+        } catch {
+            // Continue logout flow even if persist purge fails.
+        }
+
+        if (typeof window !== 'undefined') {
+            try {
+                window.localStorage.clear();
+            } catch {
+                // Ignore localStorage clear failures.
+            }
+
+            try {
+                window.sessionStorage.clear();
+            } catch {
+                // Ignore sessionStorage clear failures.
+            }
+        }
+
         setRoomId('room1');
     };
 
