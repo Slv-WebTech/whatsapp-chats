@@ -10,6 +10,23 @@ export default defineConfig(({ mode }) => {
         define: {
             __APP_VERSION__: JSON.stringify(appVersion)
         },
+        build: {
+            rollupOptions: {
+                output: {
+                    manualChunks(id) {
+                        if (id.includes('node_modules/firebase')) {
+                            return 'vendor-firebase';
+                        }
+
+                        if (id.includes('node_modules/recharts')) {
+                            return 'vendor-recharts';
+                        }
+
+                        return undefined;
+                    }
+                }
+            }
+        },
         plugins: [react({ include: /\.[jt]sx?$/ })],
         server: {
             port: 1432,

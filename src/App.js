@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { signInAnonymously } from 'firebase/auth';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { Virtuoso } from 'react-virtuoso';
-import { toPng } from 'html-to-image';
 import { MessageCircleMore, X } from 'lucide-react';
 import ChatBubble from './components/ChatBubble';
 import ChatHeader from './components/ChatHeader';
-import ChatInsights from './components/ChatInsights';
 import FileUpload from './components/FileUpload';
 import LiveComposer from './components/LiveComposer';
 import ReplayControls from './components/ReplayControls';
 import SecretLogin from './components/SecretLogin';
-import SettingsPanel from './components/SettingsPanel';
 import { Button } from './components/ui/button';
 import { Card, CardContent } from './components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from './components/ui/sheet';
@@ -59,6 +56,9 @@ import {
     setUserAvatar
 } from './store/appSessionSlice';
 import { persistor } from './store/store';
+
+const ChatInsights = lazy(() => import('./components/ChatInsights'));
+const SettingsPanel = lazy(() => import('./components/SettingsPanel'));
 
 const DEFAULT_CHAT_BACKGROUND = {
     formal: {
@@ -2398,6 +2398,7 @@ function App() {
         }
 
         try {
+            const { toPng } = await import('html-to-image');
             const dataUrl = await toPng(chatCaptureRef.current, {
                 cacheBust: true,
                 pixelRatio: 2
@@ -2586,7 +2587,15 @@ function App() {
                                         >
                                             <X size={16} />
                                         </Button>
-                                        <ChatInsights messages={messages} />
+                                        <Suspense
+                                            fallback={(
+                                                <div className="glass-panel rounded-[1.2rem] p-6 text-sm text-[var(--text-muted)]">
+                                                    Loading analysis...
+                                                </div>
+                                            )}
+                                        >
+                                            <ChatInsights messages={messages} />
+                                        </Suspense>
                                     </div>
                                 ) : groupedMessages.length === 0 && isParsing ? (
                                     <div className="flex h-full min-h-[42vh] items-center justify-center px-4 text-center">
@@ -2872,29 +2881,37 @@ function App() {
                             ) : null}
 
                             {['appearance', 'participants', 'export'].includes(settingsSection) ? (
-                                <SettingsPanel
-                                    section={settingsSection}
-                                    theme={resolvedTheme}
-                                    themePreference={themePreference}
-                                    onThemeChange={handleThemeChange}
-                                    chatMode={chatMode}
-                                    onChatModeChange={(nextMode) => dispatch(setChatMode(nextMode))}
-                                    users={users}
-                                    currentUser={currentUser}
-                                    onCurrentUserChange={(nextUser) => dispatch(setCurrentUser(nextUser))}
-                                    onAvatarUpload={handleAvatarUpload}
-                                    onBackgroundUpload={handleBackgroundUpload}
-                                    selectedBackgroundId={selectedBackgroundId}
-                                    hasCustomBackground={Boolean(customBackgroundUrl)}
-                                    backgroundOptions={PRESET_CHAT_BACKGROUNDS}
-                                    onBackgroundPresetSelect={handleBackgroundPresetSelect}
-                                    onResetPreferences={handleResetPreferences}
-                                    onExport={handleExport}
-                                    onClearChat={handleClearChat}
-                                    isClearingChat={isClearingChat}
-                                    onDeleteChatData={handleDeleteChatData}
-                                    isDeletingChatData={isDeletingChatData}
-                                />
+                                <Suspense
+                                    fallback={(
+                                        <div className="glass-panel rounded-[1.2rem] p-6 text-sm text-[var(--text-muted)]">
+                                            Loading settings...
+                                        </div>
+                                    )}
+                                >
+                                    <SettingsPanel
+                                        section={settingsSection}
+                                        theme={resolvedTheme}
+                                        themePreference={themePreference}
+                                        onThemeChange={handleThemeChange}
+                                        chatMode={chatMode}
+                                        onChatModeChange={(nextMode) => dispatch(setChatMode(nextMode))}
+                                        users={users}
+                                        currentUser={currentUser}
+                                        onCurrentUserChange={(nextUser) => dispatch(setCurrentUser(nextUser))}
+                                        onAvatarUpload={handleAvatarUpload}
+                                        onBackgroundUpload={handleBackgroundUpload}
+                                        selectedBackgroundId={selectedBackgroundId}
+                                        hasCustomBackground={Boolean(customBackgroundUrl)}
+                                        backgroundOptions={PRESET_CHAT_BACKGROUNDS}
+                                        onBackgroundPresetSelect={handleBackgroundPresetSelect}
+                                        onResetPreferences={handleResetPreferences}
+                                        onExport={handleExport}
+                                        onClearChat={handleClearChat}
+                                        isClearingChat={isClearingChat}
+                                        onDeleteChatData={handleDeleteChatData}
+                                        isDeletingChatData={isDeletingChatData}
+                                    />
+                                </Suspense>
                             ) : null}
                         </div>
                     </SheetContent>
