@@ -1,4 +1,4 @@
-import { CalendarClock, ChevronDown, ChevronUp, Download, Lock, MoonStar, MoreVertical, Search, Settings2, Sparkles, SunMedium, Upload, Video } from 'lucide-react';
+import { BarChart3, CalendarClock, ChevronDown, ChevronUp, Download, Lock, MoonStar, MoreVertical, Search, Settings2, Sparkles, SunMedium, Upload, Video } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useState } from 'react';
 import { Button } from './ui/button';
@@ -24,7 +24,9 @@ function ChatHeader({
     showSearch,
     onToggleSearch,
     showTimeline,
-    onToggleTimeline
+    onToggleTimeline,
+    showInsights,
+    onToggleInsights
 }) {
     const shouldReduceMotion = useReducedMotion();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -149,6 +151,17 @@ function ChatHeader({
                                     >
                                         <Settings2 size={14} />
                                         Settings
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="header-menu-item"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            onToggleInsights?.();
+                                        }}
+                                    >
+                                        <BarChart3 size={14} />
+                                        {showInsights ? 'Close Insights' : 'View Insights'}
                                     </button>
                                     <button
                                         type="button"

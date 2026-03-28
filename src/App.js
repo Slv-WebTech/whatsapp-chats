@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Virtuoso } from 'react-virtuoso';
 import { toPng } from 'html-to-image';
-import { Download, MessageCircleMore } from 'lucide-react';
+import { Download, MessageCircleMore, BarChart3 } from 'lucide-react';
 import ChatBubble from './components/ChatBubble';
 import ChatHeader from './components/ChatHeader';
+import ChatInsights from './components/ChatInsights';
 import FileUpload from './components/FileUpload';
 import ReplayControls from './components/ReplayControls';
 import SettingsPanel from './components/SettingsPanel';
@@ -399,6 +400,7 @@ function App() {
     const [activeSearchIndex, setActiveSearchIndex] = useState(0);
     const [showSearch, setShowSearch] = useState(false);
     const [showTimeline, setShowTimeline] = useState(false);
+    const [showInsights, setShowInsights] = useState(false);
     const shouldReduceMotion = useReducedMotion();
     const hasOpenAIKey = Boolean(import.meta.env.VITE_OPENAI_API_KEY?.trim());
 
@@ -1053,6 +1055,8 @@ function App() {
                             onToggleSearch={() => setShowSearch((prev) => !prev)}
                             showTimeline={showTimeline}
                             onToggleTimeline={() => setShowTimeline((prev) => !prev)}
+                            showInsights={showInsights}
+                            onToggleInsights={() => setShowInsights((prev) => !prev)}
                         />
                         <ReplayControls
                             hasMessages={groupedMessages.length > 0}
@@ -1109,7 +1113,9 @@ function App() {
                                 }}
                             />
                             <div className="relative z-10 mx-auto w-full md:max-w-4xl">
-                                {groupedMessages.length === 0 && isParsing ? (
+                                {showInsights ? (
+                                    <ChatInsights messages={messages} />
+                                ) : groupedMessages.length === 0 && isParsing ? (
                                     <div className="flex h-full min-h-[42vh] items-center justify-center px-4 text-center">
                                         <motion.div
                                             initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
