@@ -29,8 +29,8 @@ export default defineConfig(({ mode }) => {
         },
         plugins: [react({ include: /\.[jt]sx?$/ })],
         server: {
-            port: 1432,
-            strictPort: true
+            port: 5173,
+            strictPort: false
         },
         esbuild: {
             loader: 'jsx',

@@ -1,127 +1,303 @@
 # ConvoLens
 
-See Conversations Differently.
+> **See Conversations Differently.**
 
-A premium real-time encrypted chat app with replay, insights, and polished UI flows, built with React, Vite, Firebase, and Redux.
+A premium real-time encrypted chat app with message replay, AI-powered chat insights, and a polished WhatsApp-style UI — built with React 18, Vite 5, Firebase, and Redux Toolkit.
 
-## Live Deployments
+---
 
-- Vercel: https://convolens-vs.vercel.app/
+## Live Demo
 
-## Preview
+| Platform | URL                              |
+| -------- | -------------------------------- |
+| Vercel   | https://convolens-vs.vercel.app/ |
 
-![Login Screen](./screenshots/login-screen.svg)
-![Live Chat](./screenshots/live-chat.svg)
-![Replay Mode](./screenshots/replay-mode.svg)
-![Chat Insights](./screenshots/chat-insights.svg)
+---
 
-## Core Features
+## Table of Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Scripts](#scripts)
+- [Architecture Overview](#architecture-overview)
+- [Deployment](#deployment)
+- [Firestore Security Rules](#firestore-security-rules)
+- [Troubleshooting](#troubleshooting)
+- [Author](#author)
+- [License](#license)
+
+---
+
+## Features
+
+### Messaging
 
 - Shared-secret room login with Firebase anonymous auth
-- AES-encrypted message content and encrypted display metadata
-- Real-time messaging with delivery/read indicators
-- Online presence, typing status, and heartbeat sync
-- Formal and Romantic chat modes
-- Light, Dark, and System theme support
+- AES-256 encrypted message content and display metadata
+- Real-time message delivery and read receipts
+- Online presence indicators, typing status, and heartbeat sync
+- Emoji reactions on messages
+- Virtualized message list for smooth performance at scale
+
+### Modes & Themes
+
+- **Formal** and **Romantic** chat modes with distinct visual styles
+- **Light**, **Dark**, and **System** theme support
 - Wallpaper presets plus custom wallpaper upload
-- Replay timeline with speed control and jump support
-- Chat insights panel with AI-assisted summary fallback logic
-- Search with next/previous navigation and match focusing
-- Export chat as PNG and parse WhatsApp export text files
-- Persistent user preferences via Redux Toolkit and redux-persist
+- Dynamic composer background that blends with the active wallpaper
 
-## Reliability and UX Safeguards
+### Chat Replay
 
-- App-level React Error Boundary with recovery UI
-- Version-aware service worker refresh handling
-- Automatic cache cleanup on app version updates
-- Automatic purge of invalid persisted Redux state
-- In-app update toast before automatic reload
+- Full replay timeline with playback speed control
+- Jump to any point in the conversation history
+- Smooth animated replay with per-message timing
+
+### Chat Insights
+
+- AI-powered conversation summary (OpenAI or local Ollama)
+- Fallback to local rule-based analysis when AI is unavailable
+- Charts and analytics via Recharts (lazy loaded)
+- Sentiment, frequency, and activity breakdowns
+
+### Import & Export
+
+- Parse and import WhatsApp `.txt` export files
+- Export current chat view as a PNG image
+- Sample chat preloaded for instant demo
+
+### Search
+
+- Full message search with next/previous navigation
+- Match highlighting with scroll-into-focus
+
+### Reliability & UX Safeguards
+
+- App-level React Error Boundary with one-click recovery UI
+- Version-aware service worker for cache invalidation
+- Automatic cache cleanup on every app version update
+- Automatic purge of invalid or corrupted persisted Redux state
+- In-app "App updated, reloading..." toast before automatic reload
+- AES-encrypted Redux persist storage
+
+---
 
 ## Tech Stack
 
-- React 18
-- Vite 5
-- Tailwind CSS
-- Firebase Auth + Firestore
-- Redux Toolkit + redux-persist
-- CryptoJS
-- Framer Motion
-- react-virtuoso
-- html-to-image
+| Layer                | Library / Tool                        |
+| -------------------- | ------------------------------------- |
+| UI Framework         | React 18                              |
+| Build Tool           | Vite 5                                |
+| Styling              | Tailwind CSS 3                        |
+| Animations           | Framer Motion                         |
+| Component Primitives | Radix UI (Dialog, Select)             |
+| Icons                | Lucide React                          |
+| Backend              | Firebase Auth (anonymous) + Firestore |
+| State Management     | Redux Toolkit + redux-persist         |
+| Encryption           | CryptoJS (AES-256)                    |
+| Virtualisation       | react-virtuoso                        |
+| Charts               | Recharts                              |
+| Image Export         | html-to-image                         |
+| AI Summary           | OpenAI API / Ollama (local)           |
 
-## Project Setup
+---
 
-### 1) Clone and install
+## Project Structure
+
+```
+convolens/
+├── public/
+│   ├── sw.js                   # Versioned service worker
+│   ├── site.webmanifest        # PWA manifest
+│   └── icons/                  # App icons
+├── src/
+│   ├── components/
+│   │   ├── AppErrorBoundary.js # Global React error boundary
+│   │   ├── ChatBubble.js       # Individual message bubble
+│   │   ├── ChatHeader.js       # Room header, search, actions
+│   │   ├── ChatInsights.js     # Analytics panel (lazy loaded)
+│   │   ├── LiveComposer.js     # Message input & send bar
+│   │   ├── ReplayControls.js   # Replay timeline & speed
+│   │   ├── SecretLogin.js      # Room join / create screen
+│   │   ├── SettingsPanel.js    # Theme, wallpaper, mode (lazy loaded)
+│   │   ├── FileUpload.js       # WhatsApp chat import
+│   │   ├── ErrorBoundary.js    # Scoped error boundary
+│   │   ├── Assets/             # Static assets & sample chat
+│   │   └── ui/                 # Radix-based UI primitives
+│   ├── firebase/
+│   │   ├── config.js           # Firebase initialisation
+│   │   └── chatService.js      # Firestore read/write operations
+│   ├── hooks/
+│   │   └── useChatAnalysis.js  # Analysis hook for insights
+│   ├── store/
+│   │   ├── store.js            # Redux store + persist config
+│   │   └── appSessionSlice.js  # Session state slice
+│   ├── utils/
+│   │   ├── aiSummary.js        # OpenAI / Ollama summary logic
+│   │   ├── encryption.js       # AES encrypt/decrypt helpers
+│   │   ├── groupMessages.js    # Message grouping by date/sender
+│   │   ├── highlight.js        # Search match highlighting
+│   │   ├── localSummary.js     # Rule-based local summary fallback
+│   │   ├── messageTypes.js     # Message type constants
+│   │   ├── parser.js           # WhatsApp .txt export parser
+│   │   ├── performance.js      # Perf utility helpers
+│   │   ├── sanitization.js     # Input sanitisation
+│   │   └── validators.js       # Form/data validators
+│   ├── App.js                  # Main app orchestrator
+│   ├── main.js                 # React root, SW registration, version check
+│   └── index.css               # Global styles, CSS variables, wallpaper theming
+├── vite.config.js              # Vite config (base, chunks, defines)
+├── tailwind.config.js
+├── postcss.config.js
+└── package.json
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm (recommended) or npm
+- A Firebase project with **Anonymous Auth** and **Firestore** enabled
+
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/Slv-WebTech/whatsapp-chats.git
 cd whatsapp-chats
-npm install
+pnpm install
+# or: npm install
 ```
 
-### 2) Configure environment
+### 2. Configure environment variables
 
-Create `.env.local`:
+Create a `.env.local` file in the project root (see [Environment Variables](#environment-variables)).
+
+### 3. Run the dev server
+
+```bash
+pnpm run dev
+# or: npm run dev
+```
+
+App starts at `http://localhost:5173`.
+
+### 4. Build for production
+
+```bash
+pnpm run build
+# or: npm run build
+```
+
+Output is written to `dist/`.
+
+### 5. Preview the production build locally
+
+```bash
+pnpm run preview
+```
+
+---
+
+## Environment Variables
+
+Create `.env.local` in the project root:
 
 ```env
-VITE_FIREBASE_API_KEY=your_key
-VITE_FIREBASE_AUTH_DOMAIN=your_domain
-VITE_FIREBASE_PROJECT_ID=your_project
-VITE_FIREBASE_STORAGE_BUCKET=your_bucket
+# ── Firebase (required) ──────────────────────────────────────
+VITE_FIREBASE_API_KEY=your_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 
-# Optional AI settings
-VITE_OPENAI_API_KEY=your_openai_key
+# ── AI Summary (optional) ────────────────────────────────────
+# OpenAI (cloud)
+VITE_OPENAI_API_KEY=sk-...
+
+# Ollama (local LLM — no API key needed)
 VITE_OLLAMA_BASE_URL=http://127.0.0.1:11434
 VITE_OLLAMA_MODEL=llama3.2:3b
 
-# Optional app settings
+# ── App Settings (optional) ──────────────────────────────────
+# URL to an audio file played on message send
 VITE_MESSAGE_TONE_URL=
-VITE_REDUX_PERSIST_SECRET=your_secret
+
+# Secret used to AES-encrypt the Redux persist storage
+VITE_REDUX_PERSIST_SECRET=change_me_to_a_strong_secret
 ```
 
-### 3) Run locally
+> **Note:** Firebase environment variables must be present at **build time**. Do not add `.env.local` to version control.
 
-```bash
-npm run dev
-```
+---
 
-### 4) Build production bundle
+## Scripts
 
-```bash
-npm run build
-```
+| Command            | Description                        |
+| ------------------ | ---------------------------------- |
+| `pnpm run dev`     | Start Vite dev server on port 5173 |
+| `pnpm run build`   | Production build to `dist/`        |
+| `pnpm run preview` | Serve the production build locally |
 
-## Deployment Notes
+---
 
-### Vercel
+## Architecture Overview
 
-- No custom base path is required.
-- Build output is generated for root hosting automatically.
-- Domain example: `https://convolens-vs.vercel.app/`
+### Encryption
 
-## Troubleshooting
+All messages are AES-encrypted client-side before being written to Firestore. The room secret entered at login is the encryption key — the server never sees plaintext content. Redux persist storage is also AES-encrypted using `VITE_REDUX_PERSIST_SECRET`.
 
-### Blank screen after deploy
+### State Management
 
-- Ensure asset paths in generated `dist/index.html` match your host path.
-- For Vercel root hosting, assets should look like `/assets/...`.
-- Hard refresh once to clear old shell from browser cache.
+Redux Toolkit manages all session state (auth, theme, chat mode, wallpaper, avatars). `redux-persist` saves this to `localStorage` with AES encryption. On startup, a shape validator runs against the restored state and automatically calls `persistor.purge()` if the data is malformed or corrupted.
 
-### App not updating after release
+### Service Worker & Versioning
 
-- Bump app version in `package.json` before deploy.
-- Version changes trigger cache cleanup and update flow.
+`public/sw.js` uses a versioned cache name (`convolens-cache-<version>`). On each app update, the old cache is deleted automatically. The app version is read from `package.json` at build time via Vite's `define` and stored in `localStorage`. A version mismatch on startup triggers cache cleanup and a reload toast.
 
-### Firebase auth or data errors
+### Code Splitting
 
-- Confirm Firebase env vars are present at build time.
-- Ensure anonymous auth and Firestore are enabled.
-- Validate Firestore security rules allow authenticated reads/writes.
+Heavy components are deferred until first use:
 
-## Firestore Rules (Example)
+- `ChatInsights` — lazy loaded on panel open
+- `SettingsPanel` — lazy loaded on panel open
+- `html-to-image` — dynamically imported only during export
+
+Vendor chunks are split for optimal CDN caching:
+
+- `vendor-firebase` — Firebase SDK
+- `vendor-recharts` — Recharts charting library
+
+### AI Chat Insights
+
+`ChatInsights` tries providers in order:
+
+1. OpenAI (`VITE_OPENAI_API_KEY` present) — cloud summarisation
+2. Ollama (`VITE_OLLAMA_BASE_URL` present) — local LLM
+3. Local rule-based analysis (`localSummary.js`) — always available, no API required
+
+---
+
+## Deployment
+
+### Vercel (recommended)
+
+1. Push the repo to GitHub.
+2. Import the project in [Vercel](https://vercel.com/).
+3. Set all `VITE_*` environment variables in **Project Settings → Environment Variables**.
+4. Deploy. Vercel detects Vite automatically; no custom build commands are needed.
+5. Bump `version` in `package.json` before each release to trigger the update flow.
+
+No base path configuration is required — the build targets root (`/`) by default.
+
+---
+
+## Firestore Security Rules
 
 ```js
 rules_version = '2';
@@ -146,9 +322,46 @@ service cloud.firestore {
 }
 ```
 
+> All operations require Firebase anonymous auth. Unauthenticated reads and writes are denied.
+
+---
+
+## Troubleshooting
+
+### Blank screen after deploy
+
+- Confirm `VITE_FIREBASE_*` vars are set in your hosting provider's environment settings.
+- Check that asset paths in `dist/index.html` start with `/assets/...`.
+- Hard-refresh (`Ctrl+Shift+R`) to bypass the browser cache.
+
+### App not updating after a new release
+
+- Bump `version` in `package.json` before building and deploying.
+- The version change triggers cache purge and reloads the app automatically.
+
+### Firebase auth or Firestore errors
+
+- Verify anonymous auth is enabled in the Firebase console under **Authentication → Sign-in method**.
+- Ensure Firestore is created in a supported region and the security rules above are published.
+- Check browser console for specific Firebase error codes.
+
+### AI insights not working
+
+- For OpenAI: confirm `VITE_OPENAI_API_KEY` is valid and has sufficient quota.
+- For Ollama: ensure the local server is running (`ollama serve`) and the model is pulled (`ollama pull llama3.2:3b`).
+- If neither is configured, the app falls back to local rule-based analysis automatically.
+
+### Dev server port conflict
+
+- The dev server defaults to port **5173**. If that port is taken, Vite will automatically pick the next available port.
+
+---
+
 ## Author
 
-Vivek Sharma
+**Vivek Sharma**
+
+---
 
 ## License
 
