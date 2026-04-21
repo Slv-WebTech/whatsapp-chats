@@ -373,7 +373,7 @@ Components/
 
 ### ✅ PRODUCTION GRADE ✅
 
-Your ConvoLens application is now:
+Your Lensiq application is now:
 
 **Bulletproof** 🛡️ - Handles any input without crashing  
 **Reliable** ⚡ - Automatic error recovery  

@@ -1,18 +1,21 @@
 import {
     addDoc,
+    arrayRemove,
+    arrayUnion,
     collection,
     deleteDoc,
     deleteField,
     doc,
+    getDoc,
     getDocs,
     increment,
     limit,
     onSnapshot,
     orderBy,
     query,
+    setDoc,
     serverTimestamp,
     startAfter,
-    setDoc,
     updateDoc,
     writeBatch
 } from 'firebase/firestore';
@@ -27,6 +30,19 @@ function ensureDb() {
     }
 }
 
+function resolveChatOptions(roomId, options = {}) {
+    const collectionName = 'chats';
+    const presenceCollectionName = options.presenceCollectionName || 'presence';
+    const sanitizeChatId = options.sanitizeChatId === true;
+    const safeChatId = sanitizeChatId ? sanitizeRoomId(roomId) : String(roomId || '').trim();
+
+    return {
+        collectionName,
+        presenceCollectionName,
+        safeChatId
+    };
+}
+
 export function sanitizeRoomId(rawRoomId) {
     const safe = String(rawRoomId || 'room1')
         .trim()
@@ -36,16 +52,19 @@ export function sanitizeRoomId(rawRoomId) {
     return safe || 'room1';
 }
 
-function roomMessagesRef(roomId) {
-    return collection(db, 'rooms', sanitizeRoomId(roomId), 'messages');
+function roomMessagesRef(roomId, options) {
+    const { collectionName, safeChatId } = resolveChatOptions(roomId, options);
+    return collection(db, collectionName, safeChatId, 'messages');
 }
 
-function roomTypingRef(roomId) {
-    return collection(db, 'rooms', sanitizeRoomId(roomId), 'typing');
+function roomTypingRef(roomId, options) {
+    const { collectionName, safeChatId } = resolveChatOptions(roomId, options);
+    return collection(db, collectionName, safeChatId, 'typing');
 }
 
-function roomUsersRef(roomId) {
-    return collection(db, 'rooms', sanitizeRoomId(roomId), 'users');
+function roomUsersRef(roomId, options) {
+    const { collectionName, presenceCollectionName, safeChatId } = resolveChatOptions(roomId, options);
+    return collection(db, collectionName, safeChatId, presenceCollectionName);
 }
 
 async function deleteSnapshotDocs(snapshot) {
@@ -88,9 +107,9 @@ async function deleteRefsInParallel(docRefs, chunkSize = 200) {
     return deletedCount;
 }
 
-export function subscribeToRoomMessages(roomId, onNext, onError) {
+export function subscribeToRoomMessages(roomId, onNext, onError, options) {
     ensureDb();
-    const q = query(roomMessagesRef(roomId), orderBy('createdAt', 'desc'), limit(MESSAGE_LIMIT));
+    const q = query(roomMessagesRef(roomId, options), orderBy('createdAt', 'desc'), limit(MESSAGE_LIMIT));
 
     return onSnapshot(
         q,
@@ -113,7 +132,7 @@ export function subscribeToRoomMessages(roomId, onNext, onError) {
     );
 }
 
-export async function fetchOlderRoomMessages(roomId, cursor, pageSize = MESSAGE_PAGE_SIZE) {
+export async function fetchOlderRoomMessages(roomId, cursor, pageSize = MESSAGE_PAGE_SIZE, options) {
     ensureDb();
 
     if (!cursor) {
@@ -125,7 +144,7 @@ export async function fetchOlderRoomMessages(roomId, cursor, pageSize = MESSAGE_
     }
 
     const q = query(
-        roomMessagesRef(roomId),
+        roomMessagesRef(roomId, options),
         orderBy('createdAt', 'desc'),
         startAfter(cursor),
         limit(pageSize)
@@ -147,10 +166,10 @@ export async function fetchOlderRoomMessages(roomId, cursor, pageSize = MESSAGE_
     };
 }
 
-export async function clearRoomMessages(roomId) {
+export async function clearRoomMessages(roomId, options) {
     ensureDb();
 
-    const messagesSnapshot = await getDocs(roomMessagesRef(roomId));
+    const messagesSnapshot = await getDocs(roomMessagesRef(roomId, options));
     const messageRefs = messagesSnapshot.docs.map((entry) => entry.ref);
 
     if (!messageRefs.length) {
@@ -160,12 +179,14 @@ export async function clearRoomMessages(roomId) {
     return deleteRefsInParallel(messageRefs);
 }
 
-export async function sendRoomMessage(roomId, payload) {
+export async function sendRoomMessage(roomId, payload, options) {
     ensureDb();
+    const { collectionName, safeChatId } = resolveChatOptions(roomId, options);
 
     const safeText = String(payload?.text || '').trim();
     const safeUid = String(payload?.uid || '').trim();
     const safeSenderEncrypted = String(payload?.senderEnc || '').trim();
+    const safeClientId = String(payload?.clientId || '').trim();
     const safeType = payload?.type || 'text';
     const isEncrypted = Boolean(payload?.encrypted);
 
@@ -185,12 +206,17 @@ export async function sendRoomMessage(roomId, payload) {
         throw new Error('Plain text messages are blocked. Encrypt before sending.');
     }
 
-    await addDoc(roomMessagesRef(roomId), {
+    const messageRef = doc(roomMessagesRef(roomId, options));
+    const batch = writeBatch(db);
+    batch.set(messageRef, {
         text: safeText,
         sender: String(payload?.sender || '').trim() || null,
         senderEnc: safeSenderEncrypted || null,
         uid: safeUid,
         type: safeType,
+        clientId: safeClientId || null,
+        tags: Array.isArray(payload?.tags) ? payload.tags.slice(0, 8) : [],
+        moderation: payload?.moderation && typeof payload.moderation === 'object' ? payload.moderation : null,
         reactions: {},
         encrypted: true,
         cipherVersion: payload?.cipherVersion || null,
@@ -202,12 +228,28 @@ export async function sendRoomMessage(roomId, payload) {
         },
         createdAt: serverTimestamp()
     });
+
+    if (collectionName === 'chats') {
+        batch.set(
+            doc(db, collectionName, safeChatId),
+            {
+                updatedAt: serverTimestamp(),
+                lastMessageAt: serverTimestamp(),
+                lastMessageText: safeType === 'text' ? safeText.slice(0, 140) : `[${safeType}]`,
+                lastSenderId: safeUid,
+                lastSenderName: String(payload?.sender || '').trim() || ''
+            },
+            { merge: true }
+        );
+    }
+
+    await batch.commit();
 }
 
-export function subscribeTypingStatus(roomId, onNext, onError) {
+export function subscribeTypingStatus(roomId, onNext, onError, options) {
     ensureDb();
     return onSnapshot(
-        roomTypingRef(roomId),
+        roomTypingRef(roomId, options),
         (snapshot) => {
             const typingMap = {};
             snapshot.forEach((entry) => {
@@ -224,7 +266,7 @@ export function subscribeTypingStatus(roomId, onNext, onError) {
     );
 }
 
-export async function setTypingStatus(roomId, userId, isTyping, encryptedDisplayName = '') {
+export async function setTypingStatus(roomId, userId, isTyping, encryptedDisplayName = '', options) {
     ensureDb();
     const safeUserId = String(userId || '').trim();
     if (!safeUserId) {
@@ -232,7 +274,7 @@ export async function setTypingStatus(roomId, userId, isTyping, encryptedDisplay
     }
 
     await setDoc(
-        doc(db, 'rooms', sanitizeRoomId(roomId), 'typing', safeUserId),
+        doc(roomTypingRef(roomId, options), safeUserId),
         {
             isTyping: Boolean(isTyping),
             encryptedDisplayName: String(encryptedDisplayName || ''),
@@ -242,10 +284,10 @@ export async function setTypingStatus(roomId, userId, isTyping, encryptedDisplay
     );
 }
 
-export function subscribeRoomUsers(roomId, onNext, onError) {
+export function subscribeRoomUsers(roomId, onNext, onError, options) {
     ensureDb();
     return onSnapshot(
-        roomUsersRef(roomId),
+        roomUsersRef(roomId, options),
         (snapshot) => {
             const usersMap = {};
             snapshot.forEach((entry) => {
@@ -262,7 +304,7 @@ export function subscribeRoomUsers(roomId, onNext, onError) {
     );
 }
 
-export async function setRoomUserPresence(roomId, userId, online, encryptedDisplayName = '') {
+export async function setRoomUserPresence(roomId, userId, online, encryptedDisplayName = '', options) {
     ensureDb();
     const safeUserId = String(userId || '').trim();
     if (!safeUserId) {
@@ -270,7 +312,7 @@ export async function setRoomUserPresence(roomId, userId, online, encryptedDispl
     }
 
     await setDoc(
-        doc(db, 'rooms', sanitizeRoomId(roomId), 'users', safeUserId),
+        doc(roomUsersRef(roomId, options), safeUserId),
         {
             online: Boolean(online),
             encryptedDisplayName: String(encryptedDisplayName || ''),
@@ -283,10 +325,11 @@ export async function setRoomUserPresence(roomId, userId, online, encryptedDispl
 export async function scrubLegacyRoomMetadata(roomId) {
     ensureDb();
 
-    const safeRoomId = sanitizeRoomId(roomId);
-    const messagesSnapshot = await getDocs(roomMessagesRef(safeRoomId));
-    const usersSnapshot = await getDocs(roomUsersRef(safeRoomId));
-    const typingSnapshot = await getDocs(roomTypingRef(safeRoomId));
+    const { collectionName, presenceCollectionName, safeChatId } = resolveChatOptions(roomId);
+    const scopedOptions = { collectionName, presenceCollectionName, sanitizeChatId: false };
+    const messagesSnapshot = await getDocs(roomMessagesRef(safeChatId, scopedOptions));
+    const usersSnapshot = await getDocs(roomUsersRef(safeChatId, scopedOptions));
+    const typingSnapshot = await getDocs(roomTypingRef(safeChatId, scopedOptions));
     let batch = writeBatch(db);
     let pendingWrites = 0;
     let mutationCount = 0;
@@ -306,7 +349,7 @@ export async function scrubLegacyRoomMetadata(roomId) {
     for (const entry of messagesSnapshot.docs) {
         const data = entry.data() || {};
         if ('sender' in data) {
-            batch.update(doc(db, 'rooms', safeRoomId, 'messages', entry.id), {
+            batch.update(doc(db, collectionName, safeChatId, 'messages', entry.id), {
                 sender: deleteField()
             });
             mutationCount += 1;
@@ -318,7 +361,7 @@ export async function scrubLegacyRoomMetadata(roomId) {
     usersSnapshot.forEach((entry) => {
         const data = entry.data() || {};
         if ('name' in data || 'displayName' in data) {
-            batch.update(doc(db, 'rooms', safeRoomId, 'users', entry.id), {
+            batch.update(doc(db, collectionName, safeChatId, presenceCollectionName, entry.id), {
                 name: deleteField(),
                 displayName: deleteField()
             });
@@ -330,7 +373,7 @@ export async function scrubLegacyRoomMetadata(roomId) {
     typingSnapshot.forEach((entry) => {
         const data = entry.data() || {};
         if ('displayName' in data) {
-            batch.update(doc(db, 'rooms', safeRoomId, 'typing', entry.id), {
+            batch.update(doc(db, collectionName, safeChatId, 'typing', entry.id), {
                 displayName: deleteField()
             });
             mutationCount += 1;
@@ -346,14 +389,14 @@ export async function scrubLegacyRoomMetadata(roomId) {
     return mutationCount;
 }
 
-export async function hardDeleteRoomData(roomId) {
+export async function hardDeleteRoomData(roomId, options) {
     ensureDb();
 
-    const safeRoomId = sanitizeRoomId(roomId);
+    const { collectionName, safeChatId } = resolveChatOptions(roomId, options);
     const [messagesSnapshot, typingSnapshot, usersSnapshot] = await Promise.all([
-        getDocs(roomMessagesRef(safeRoomId)),
-        getDocs(roomTypingRef(safeRoomId)),
-        getDocs(roomUsersRef(safeRoomId))
+        getDocs(roomMessagesRef(safeChatId, { ...options, sanitizeChatId: false, collectionName })),
+        getDocs(roomTypingRef(safeChatId, { ...options, sanitizeChatId: false, collectionName })),
+        getDocs(roomUsersRef(safeChatId, { ...options, sanitizeChatId: false, collectionName }))
     ]);
 
     let deletedCount = 0;
@@ -361,29 +404,61 @@ export async function hardDeleteRoomData(roomId) {
     deletedCount += await deleteSnapshotDocs(typingSnapshot);
     deletedCount += await deleteSnapshotDocs(usersSnapshot);
 
-    await deleteDoc(doc(db, 'rooms', safeRoomId)).catch(() => {
+    await deleteDoc(doc(db, collectionName, safeChatId)).catch(() => {
         // Parent room doc may not exist; data removal still succeeds.
     });
 
     return deletedCount;
 }
 
-export async function addMessageReaction(roomId, messageId, emoji) {
+export async function addMessageReaction(roomId, messageId, emoji, options) {
     ensureDb();
     const safeMessageId = String(messageId || '').trim();
     const safeEmoji = String(emoji || '').trim();
+    const safeUserId = String(options?.userId || '').trim();
 
     if (!safeMessageId || !safeEmoji) {
         return;
     }
 
+    const messageRef = doc(roomMessagesRef(roomId, options), safeMessageId);
     const reactionKey = `reactions.${safeEmoji}`;
-    await updateDoc(doc(db, 'rooms', sanitizeRoomId(roomId), 'messages', safeMessageId), {
+
+    if (safeUserId) {
+        const snapshot = await getDoc(messageRef);
+        const existing = snapshot.data()?.reactions?.[safeEmoji];
+
+        if (Array.isArray(existing)) {
+            const hasReacted = existing.includes(safeUserId);
+            await updateDoc(messageRef, {
+                [reactionKey]: hasReacted ? arrayRemove(safeUserId) : arrayUnion(safeUserId)
+            });
+            return;
+        }
+
+        await updateDoc(messageRef, {
+            [reactionKey]: arrayUnion(safeUserId)
+        });
+        return;
+    }
+
+    await updateDoc(messageRef, {
         [reactionKey]: increment(1)
     });
 }
 
-export async function markMessageDelivered(roomId, messageId, userId) {
+export async function deleteRoomMessage(roomId, messageId, options) {
+    ensureDb();
+
+    const safeMessageId = String(messageId || '').trim();
+    if (!safeMessageId) {
+        return;
+    }
+
+    await deleteDoc(doc(roomMessagesRef(roomId, options), safeMessageId));
+}
+
+export async function markMessageDelivered(roomId, messageId, userId, options) {
     ensureDb();
 
     const safeMessageId = String(messageId || '').trim();
@@ -392,13 +467,13 @@ export async function markMessageDelivered(roomId, messageId, userId) {
         return;
     }
 
-    await updateDoc(doc(db, 'rooms', sanitizeRoomId(roomId), 'messages', safeMessageId), {
+    await updateDoc(doc(roomMessagesRef(roomId, options), safeMessageId), {
         [`deliveredTo.${safeUserId}`]: true,
         deliveredAt: serverTimestamp()
     });
 }
 
-export async function markMessageRead(roomId, messageId, userId) {
+export async function markMessageRead(roomId, messageId, userId, options) {
     ensureDb();
 
     const safeMessageId = String(messageId || '').trim();
@@ -407,7 +482,7 @@ export async function markMessageRead(roomId, messageId, userId) {
         return;
     }
 
-    await updateDoc(doc(db, 'rooms', sanitizeRoomId(roomId), 'messages', safeMessageId), {
+    await updateDoc(doc(roomMessagesRef(roomId, options), safeMessageId), {
         [`readBy.${safeUserId}`]: true,
         readAt: serverTimestamp()
     });

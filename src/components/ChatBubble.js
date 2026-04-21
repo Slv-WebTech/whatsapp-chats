@@ -1,6 +1,6 @@
 import { getHighlightParts } from '../utils/highlight';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, CheckCheck, FileText, Info, Mic, Phone, Play, Video } from 'lucide-react';
+import { Check, CheckCheck, Download, FileText, Info, Mic, Phone, Play, Video } from 'lucide-react';
 import { clsx } from 'clsx';
 import { classifyMessage, getCallDetails, getMediaLabel, getResolvableMediaSource, getVoiceDuration } from '../utils/messageTypes';
 
@@ -118,7 +118,56 @@ function CallBubble({ message, reduceMotion }) {
     );
 }
 
-function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef, onReplayFrom, onAddReaction, animateEntry }) {
+function FileBubble({ message, reduceMotion }) {
+    const attachment = message.attachment;
+    
+    if (!attachment || !attachment.url) {
+        return null;
+    }
+
+    const getFileIcon = () => {
+        const type = attachment.type || '';
+        if (type.startsWith('image/')) return '🖼️';
+        if (type.startsWith('video/')) return '🎬';
+        if (type.startsWith('audio/')) return '🎵';
+        if (type.includes('pdf')) return '📄';
+        if (type.includes('word') || type.includes('document')) return '📝';
+        if (type.includes('sheet') || type.includes('excel')) return '📊';
+        if (type.includes('zip') || type.includes('compressed')) return '📦';
+        return '📎';
+    };
+
+    const formatFileSize = (bytes) => {
+        if (!bytes) return '';
+        if (bytes < 1024) return `${bytes}B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+    };
+
+    return (
+        <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} whileTap={reduceMotion ? undefined : { scale: 0.99 }}>
+            <div className="rounded-2xl border border-emerald-300/40 bg-emerald-500/12 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-700/50 dark:bg-emerald-500/10">
+                <div className="flex items-center gap-3">
+                    <span className="text-xl">{getFileIcon()}</span>
+                    <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-[var(--text-main)]">{attachment.name}</p>
+                        <p className="text-xs text-[var(--text-muted)]">{formatFileSize(attachment.size)}</p>
+                    </div>
+                    <a
+                        href={attachment.url}
+                        download={attachment.name}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-600 transition-all hover:bg-emerald-500/30 dark:bg-emerald-500/30 dark:text-emerald-200"
+                        aria-label={`Download ${attachment.name}`}
+                    >
+                        <Download size={16} />
+                    </a>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
+
+function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef, onReplayFrom, onAddReaction, onReply, onOpenMessageActions, animateEntry }) {
     const reduceMotion = useReducedMotion();
     const messageType = classifyMessage(message);
     const reactionEntries = Object.entries(message.reactions || {}).filter(([, count]) => Number(count) > 0);
@@ -206,6 +255,7 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                 <AnimatePresence mode="wait">
                     {messageType === 'voice' ? <VoiceBubble key="voice" message={message} reduceMotion={reduceMotion} /> : null}
                     {messageType === 'media' ? <MediaBubble key="media" message={message} reduceMotion={reduceMotion} /> : null}
+                    {message.attachment && message.attachment.url ? <FileBubble key="file" message={message} reduceMotion={reduceMotion} /> : null}
                     {messageType === 'text' ? <MessageHighlight key="text" message={message.message} query={query} reduceMotion={reduceMotion} /> : null}
                 </AnimatePresence>
 

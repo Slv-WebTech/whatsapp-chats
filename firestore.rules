@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function chatDoc(chatId) {
+      return get(/databases/$(database)/documents/chats/$(chatId));
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn() && request.auth.uid in chatDoc(chatId).data.members;
+    }
+
+    function isValidMessageCreate() {
+      return request.resource.data.encrypted == true
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1400
+        && request.resource.data.type is string;
+    }
+
+    function isConfiguredAdminUid(uid) {
+      return uid == 'djK91MD4FiTQIqxD392Tz8WZqnB2';
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSelf(uid) && request.resource.data.role == (isConfiguredAdminUid(uid) ? 'admin' : 'user');
+      allow update: if isAdmin() || (isSelf(uid) && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    match /user_chats/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update: if isSelf(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId} {
+      allow read: if isChatMember(chatId) || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.members is list
+        && request.resource.data.members.size() >= 1
+        && request.resource.data.members.size() <= 50
+        && request.auth.uid in request.resource.data.members;
+      allow update: if isChatMember(chatId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if isChatMember(chatId) || isAdmin();
+      allow create: if isChatMember(chatId) && isValidMessageCreate();
+      allow update: if isChatMember(chatId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId}/typing/{uid} {
+      allow read: if isChatMember(chatId) || isAdmin();
+      allow create, update: if (isChatMember(chatId) && uid == request.auth.uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId}/presence/{uid} {
+      allow read: if isChatMember(chatId) || isAdmin();
+      allow create, update: if (isChatMember(chatId) && uid == request.auth.uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId}/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    match /admin_stats/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

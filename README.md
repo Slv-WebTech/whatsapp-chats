@@ -1,6 +1,169 @@
-# ConvoLens
+# Lensiq
 
-> **See Conversations Differently.**
+Premium encrypted messaging workspace with AI assistance, replay timeline, imported chat archives, and Firebase real-time collaboration.
+
+## Highlights
+
+- Firebase auth with profile-based chat workspace
+- End-to-end encrypted message payloads
+- Real-time delivery, read receipts, presence, and typing indicators
+- Offline outgoing queue with reconnect auto-sync
+- AI gateway with provider fallback pipeline
+- Semantic search, smart replies, moderation, and assistant commands
+- Imported chats stored separately in encrypted IndexedDB payloads
+- Unified chat list with small Imported badge for imported threads
+- Profile screen for avatar, username, theme, and appearance settings
+
+## UX Flow
+
+1. Sign in or create account
+2. Open Home
+3. Start direct/group chat from search or group secret
+4. Optionally import chat from the small Import action on Home
+5. Open profile by clicking profile picture on Home to manage user settings
+
+## Current Navigation
+
+- /home: main chat workspace entry
+- /chat/:chatId: live Firebase chat thread
+- /imported/:importedId: imported archive thread
+- /profile: account, avatar, theme, appearance settings
+- /admin: admin-only dashboard
+
+## Tech Stack
+
+- React 18 + Vite 5
+- Tailwind CSS + Framer Motion
+- Redux Toolkit + redux-persist
+- IndexedDB-backed custom persist storage
+- Firebase Auth + Firestore
+- CryptoJS for encrypted persisted payloads
+
+## Storage and Security
+
+- Redux persist is encrypted and stored via IndexedDB adapter
+- Imported chat payloads are encrypted before IndexedDB persistence
+- Offline outgoing queue uses IndexedDB
+- API calls to AI gateway include JWT bearer token (Firebase ID token)
+- AI gateway performs token-claim validation before handling tasks
+
+## AI Pipeline
+
+Priority order:
+
+1. OpenAI
+2. Gemini
+3. Ollama
+4. Local fallback
+
+Supported tasks include summary, suggestions, assistant commands, web context, and embeddings.
+
+## Import Behavior
+
+- Import is initiated only from Home
+- Imported chats are stored as separate records
+- Imported chats are not merged into live Firebase chat data model
+- In list UI, imported items are marked with a compact Imported tag
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+- Firebase project with Auth + Firestore enabled
+
+### Install
+
+```bash
+npm install
+```
+
+### Run
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+## Environment Variables
+
+Create .env.local in project root:
+
+```env
+# Firebase
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+
+# Client-side encrypted persist secret
+VITE_REDUX_PERSIST_SECRET=
+
+# Optional imported chat encryption override
+VITE_IMPORTED_CHAT_SECRET=
+
+# Optional audio
+VITE_MESSAGE_TONE_URL=
+```
+
+Server-side environment values for API gateway:
+
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-flash
+
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.2:3b
+
+HUGGINGFACE_API_KEY=
+HUGGINGFACE_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+TAVILY_API_KEY=
+```
+
+## Key Files
+
+- src/pages/Home.js
+- src/pages/Profile.js
+- src/pages/Chat.js
+- src/pages/ImportedChat.js
+- src/utils/importedChatStore.js
+- src/utils/offlineMessageQueue.js
+- src/store/indexedDbStorage.js
+- src/store/store.js
+- src/services/ai/index.js
+- api/ai.js
+
+## Notes
+
+- Imported chats and live chats intentionally remain separate domain flows for scalability and data isolation.
+- Profile screen is the single place for user-adjustable settings.
+- Home uses compact action controls instead of large utility cards.
+
+## Scripts
+
+- npm run dev
+- npm run build
+- npm run preview
+
+## License
+
+MIT
+
+# Lensiq
+
+> **See Conversations Smarter**
 
 A premium real-time encrypted chat app with message replay, AI-powered chat insights, and a polished WhatsApp-style UI — built with React 18, Vite 5, Firebase, and Redux Toolkit.
 
@@ -8,9 +171,9 @@ A premium real-time encrypted chat app with message replay, AI-powered chat insi
 
 ## Live Demo
 
-| Platform | URL                              |
-| -------- | -------------------------------- |
-| Vercel   | https://convolens-vs.vercel.app/ |
+| Platform | URL                           |
+| -------- | ----------------------------- |
+| Vercel   | https://lensiq-vs.vercel.app/ |
 
 ---
 
@@ -25,6 +188,7 @@ A premium real-time encrypted chat app with message replay, AI-powered chat insi
 - [Architecture Overview](#architecture-overview)
 - [Deployment](#deployment)
 - [Firestore Security Rules](#firestore-security-rules)
+- [Verification Checklist](#verification-checklist)
 - [Troubleshooting](#troubleshooting)
 - [Author](#author)
 - [License](#license)
@@ -35,12 +199,20 @@ A premium real-time encrypted chat app with message replay, AI-powered chat insi
 
 ### Messaging
 
-- Shared-secret room login with Firebase anonymous auth
+- Username/password authentication backed by Firebase Email/Password auth
+- Legacy shared-secret room mode remains available for backward compatibility
 - AES-256 encrypted message content and display metadata
 - Real-time message delivery and read receipts
 - Online presence indicators, typing status, and heartbeat sync
 - Emoji reactions on messages
 - Virtualized message list for smooth performance at scale
+
+### Auth Landing Experience
+
+- Clean glass-style sign-in screen with focused actions (Create Account / Sign In)
+- Appearance settings moved behind a compact settings icon to reduce visual clutter
+- One-tap switches for mode (`Professional` / `Romantic`) and theme (`Light` / `Dark`)
+- Layered diagonal wallpaper and gradient background with adaptive mood styling
 
 ### Modes & Themes
 
@@ -107,7 +279,7 @@ A premium real-time encrypted chat app with message replay, AI-powered chat insi
 ## Project Structure
 
 ```
-convolens/
+lensiq/
 ├── public/
 │   ├── sw.js                   # Versioned service worker
 │   ├── site.webmanifest        # PWA manifest
@@ -258,7 +430,7 @@ Redux Toolkit manages all session state (auth, theme, chat mode, wallpaper, avat
 
 ### Service Worker & Versioning
 
-`public/sw.js` uses a versioned cache name (`convolens-cache-<version>`). On each app update, the old cache is deleted automatically. The app version is read from `package.json` at build time via Vite's `define` and stored in `localStorage`. A version mismatch on startup triggers cache cleanup and a reload toast.
+`public/sw.js` uses a versioned cache name (`<brand-key>-cache-<version>`). On each app update, the old cache is deleted automatically. The app version is read from `package.json` at build time via Vite's `define` and stored in `localStorage`. A version mismatch on startup triggers cache cleanup and a reload toast.
 
 ### Code Splitting
 
@@ -295,6 +467,39 @@ Vendor chunks are split for optimal CDN caching:
 
 No base path configuration is required — the build targets root (`/`) by default.
 
+### Firebase Rules Deployment Workflow (CLI)
+
+Use this workflow to publish `firestore.rules` safely.
+
+1. Install Firebase CLI (once):
+
+```bash
+pnpm dlx firebase-tools@latest --version
+```
+
+2. Login and select project:
+
+```bash
+pnpm dlx firebase-tools@latest login
+pnpm dlx firebase-tools@latest use --add
+```
+
+3. Validate locally with emulator (recommended):
+
+```bash
+pnpm dlx firebase-tools@latest emulators:start --only firestore
+```
+
+4. Deploy only Firestore rules:
+
+```bash
+pnpm dlx firebase-tools@latest deploy --only firestore:rules
+```
+
+5. Verify in Firebase Console:
+   - Firestore Database → Rules
+   - Confirm latest publish timestamp and expected rules content
+
 ---
 
 ## Firestore Security Rules
@@ -303,26 +508,79 @@ No base path configuration is required — the build targets root (`/`) by defau
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /rooms/{roomId} {
-      allow read, write: if request.auth != null;
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-      match /messages/{messageId} {
-        allow read, write, delete: if request.auth != null;
-      }
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
 
-      match /typing/{typingId} {
-        allow read, write, delete: if request.auth != null;
-      }
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
 
-      match /users/{userId} {
-        allow read, write, delete: if request.auth != null;
-      }
+    function isAdmin() {
+      return isSignedIn() && userDoc(request.auth.uid).data.role == 'admin';
+    }
+
+    function chatDoc(chatId) {
+      return get(/databases/$(database)/documents/chats/$(chatId));
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn() && chatDoc(chatId).data.members.hasAny([request.auth.uid]);
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSelf(uid);
+      allow update: if isSelf(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /user_chats/{uid} {
+      allow read, write: if isSelf(uid) || isAdmin();
+    }
+
+    match /chats/{chatId} {
+      allow read: if isChatMember(chatId) || isAdmin();
+      allow create: if isSignedIn();
+      allow update: if isChatMember(chatId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId}/{document=**} {
+      allow read, write: if isChatMember(chatId) || isAdmin();
+    }
+
+    match /admin_stats/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
 ```
 
-> All operations require Firebase anonymous auth. Unauthenticated reads and writes are denied.
+> Rules enforce signed-in access, chat-member scoping, and admin-only access for `admin_stats`.
+
+---
+
+## Verification Checklist
+
+Use this quick checklist before and after deployment:
+
+- `pnpm run build` completes without errors
+- Firestore rules deploy succeeds: `firebase deploy --only firestore:rules`
+- New user can register and log in
+- User can create or join at least one chat
+- Non-member cannot open another chat by direct URL
+- Admin user can open `/admin`; non-admin is redirected
+- Legacy room mode still opens and sends messages
+- App reload/update flow still works after a version bump
 
 ---
 

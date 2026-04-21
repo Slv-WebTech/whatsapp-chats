@@ -1,4 +1,5 @@
 import React from 'react';
+import { BRAND } from '../config/branding';
 
 class AppErrorBoundary extends React.Component {
     constructor(props) {
@@ -47,7 +48,7 @@ class AppErrorBoundary extends React.Component {
                         }}
                     >
                         <p style={{ margin: 0, fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.7 }}>
-                            ConvoLens
+                            {BRAND.name}
                         </p>
                         <h1 style={{ margin: '0.4rem 0 0', fontSize: '1.125rem', fontWeight: 700 }}>Something went wrong</h1>
                         <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem', opacity: 0.86 }}>

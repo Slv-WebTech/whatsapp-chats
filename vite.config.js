@@ -22,25 +22,38 @@ export default defineConfig(({ mode }) => {
                             return 'vendor-recharts';
                         }
 
+                        if (id.includes('node_modules/framer-motion')) {
+                            return 'vendor-motion';
+                        }
+
+                        if (id.includes('node_modules/lucide-react')) {
+                            return 'vendor-icons';
+                        }
+
+                        if (id.includes('node_modules/react-virtuoso')) {
+                            return 'vendor-chat-virtualization';
+                        }
+
                         return undefined;
                     }
                 }
             }
         },
-        plugins: [react({ include: /\.[jt]sx?$/ })],
+        plugins: [react()],
         server: {
             port: 5173,
             strictPort: false
         },
         esbuild: {
             loader: 'jsx',
-            include: /src\/.*\.js$/,
+            include: /src[/\\].*\.jsx?$/,
             exclude: []
         },
         optimizeDeps: {
             esbuildOptions: {
                 loader: {
-                    '.js': 'jsx'
+                    '.js': 'jsx',
+                    '.jsx': 'jsx'
                 }
             }
         }

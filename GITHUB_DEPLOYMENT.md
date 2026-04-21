@@ -19,7 +19,7 @@ Your project has been initialized with Git and is ready to push to GitHub.
 2. Click **New** button (or go to https://github.com/new)
 3. Create a new repository with these settings:
    - **Repository name**: `whatsapp-chats`
-   - **Description**: ConvoLens with Dual Modes, Themes & Advanced Features
+   - **Description**: Lensiq with Dual Modes, Themes & Advanced Features
    - **Visibility**: Public or Private (your choice)
    - **Initialize repository**: Leave unchecked (we'll push existing code)
 

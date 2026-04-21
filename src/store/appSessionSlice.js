@@ -1,15 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { createInitialAppSessionState, DEFAULT_PREFERENCES, normalizeThemePreference, normalizeChatMode } from '../utils/defaultPreferences';
 
-const initialState = {
-    authSession: null,
-    chatMode: 'romantic',
-    themePreference: 'dark',
-    currentUser: 'You',
-    lastRoomId: 'room1',
-    selectedBackgroundId: '',
-    customBackgroundUrl: '',
-    avatars: {}
-};
+const initialState = createInitialAppSessionState();
 
 const appSessionSlice = createSlice({
     name: 'session',
@@ -33,11 +25,10 @@ const appSessionSlice = createSlice({
             state.lastRoomId = 'room1';
         },
         setChatMode(state, action) {
-            state.chatMode = action.payload === 'formal' ? 'formal' : 'romantic';
+            state.chatMode = normalizeChatMode(action.payload);
         },
         setThemePreference(state, action) {
-            const nextTheme = action.payload;
-            state.themePreference = ['light', 'dark', 'system'].includes(nextTheme) ? nextTheme : 'dark';
+            state.themePreference = normalizeThemePreference(action.payload);
         },
         setCurrentUser(state, action) {
             const nextUser = String(action.payload || '').trim();

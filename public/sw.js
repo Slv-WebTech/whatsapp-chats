@@ -1,5 +1,6 @@
 const appVersion = new URL(self.location.href).searchParams.get('v') || 'dev';
-const CACHE_NAME = `convolens-cache-${appVersion}`;
+const cachePrefix = new URL(self.location.href).searchParams.get('cp') || 'app-cache';
+const CACHE_NAME = `${cachePrefix}-${appVersion}`;
 const APP_SHELL_FILES = ['./', './index.html', './site.webmanifest'];
 
 self.addEventListener('install', (event) => {

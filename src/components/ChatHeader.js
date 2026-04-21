@@ -1,8 +1,9 @@
-import { BarChart3, CalendarClock, ChevronDown, ChevronUp, Download, Lock, LogOut, MoonStar, MoreVertical, Search, Settings2, Sparkles, SunMedium, Upload, Video } from 'lucide-react';
+import { ArrowLeft, BarChart3, CalendarClock, ChevronDown, ChevronUp, Download, Lock, LogOut, MoonStar, MoreVertical, Search, Settings2, Sparkles, SunMedium, Upload, Video } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { clsx } from 'clsx';
 
 function ChatHeader({
     title,
@@ -27,6 +28,10 @@ function ChatHeader({
     onToggleTimeline,
     showInsights,
     onToggleInsights,
+    aiPanelOpen,
+    onToggleAiPanel,
+    compact,
+    onBackToHome,
     onLogout
 }) {
     const shouldReduceMotion = useReducedMotion();
@@ -72,11 +77,27 @@ function ChatHeader({
         <motion.header
             initial={shouldReduceMotion ? false : { opacity: 0, y: -8 }}
             animate={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
-            className="chat-header sticky top-0 z-20 min-h-[3.2rem] border-b border-white/55 bg-white/72 px-3 py-1.5 text-slate-900 shadow-sm backdrop-blur-md dark:border-slate-700/50 dark:bg-slate-950/58 dark:text-slate-100 md:min-h-16 md:px-6"
+            className={clsx(
+                'chat-header special-edition-header sticky top-0 z-20 border-b border-white/35 bg-[linear-gradient(120deg,rgba(15,23,42,0.72),rgba(8,47,73,0.56),rgba(15,23,42,0.72))] px-2.5 py-1.5 text-slate-100 shadow-[0_8px_24px_rgba(2,6,23,0.24)] backdrop-blur-xl dark:border-slate-600/40 dark:bg-[linear-gradient(120deg,rgba(2,6,23,0.88),rgba(15,23,42,0.82),rgba(2,6,23,0.88))] md:px-5',
+                compact ? 'min-h-[2.9rem] md:min-h-[3.2rem]' : 'min-h-[3.2rem] md:min-h-16'
+            )}
         >
             <div className="chat-header__content mx-auto flex w-full max-w-4xl flex-col gap-1.5 md:gap-2">
                 <div className="chat-header__row flex items-center justify-between gap-1.5 md:gap-2">
                     <div className="min-w-0 flex items-center gap-2">
+                        {onBackToHome ? (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="header-icon-button h-9 w-9 md:hidden"
+                                aria-label="Back to home"
+                                title="Back to home"
+                                onClick={() => onBackToHome?.()}
+                            >
+                                <ArrowLeft size={16} />
+                            </Button>
+                        ) : null}
                         <div className="relative">
                             <img
                                 src={avatar || 'https://i.pravatar.cc/100?img=12'}
@@ -101,29 +122,28 @@ function ChatHeader({
                         </div>
                     </div>
 
-                    <div className="hidden items-center gap-2 rounded-full border border-slate-200/80 bg-white/75 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/55 dark:text-slate-300 xl:inline-flex">
-                        <CalendarClock size={13} />
-                        <span>{contactMeta?.messageCount || 0} msgs</span>
-                        <span>•</span>
-                        <span>{contactMeta?.activeDayCount || 0} active days</span>
-                    </div>
-
                     <div className="chat-header__actions flex items-center gap-0.5 md:gap-1 lg:gap-1.5">
-                        <Button type="button" variant="ghost" size="icon" className="header-icon-button hidden h-10 w-10 md:inline-flex md:h-[2.35rem] md:w-[2.35rem]" aria-label="Video call preview">
-                            <Video size={16} />
-                        </Button>
                         <Button
                             type="button"
-                            onClick={() => onThemeChange(theme === 'light' ? 'dark' : 'light')}
                             variant="ghost"
                             size="icon"
                             className="header-icon-button h-10 w-10 md:h-[2.2rem] md:w-[2.2rem]"
-                            aria-label="Toggle light and dark theme"
+                            aria-label={showSearch ? 'Hide search' : 'Show search'}
+                            onClick={() => onToggleSearch?.()}
+                            title={showSearch ? 'Hide search' : 'Show search'}
                         >
-                            {theme === 'light' ? <MoonStar size={16} /> : <SunMedium size={16} />}
+                            <Search size={16} />
                         </Button>
-                        <Button type="button" variant="ghost" size="icon" className="header-icon-button hidden h-10 w-10 md:inline-flex md:h-[2.35rem] md:w-[2.35rem]" aria-label="Open settings" onClick={onOpenSettings}>
-                            <Settings2 size={16} />
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="header-icon-button hidden h-10 w-10 sm:inline-flex md:h-[2.35rem] md:w-[2.35rem]"
+                            aria-label="Toggle AI panel"
+                            onClick={() => onToggleAiPanel?.()}
+                            title="AI assistant"
+                        >
+                            <Sparkles size={16} className={aiPanelOpen ? 'text-cyan-300' : ''} />
                         </Button>
                         <div ref={menuContainerRef} className="relative">
                             <Button
@@ -138,7 +158,18 @@ function ChatHeader({
                             </Button>
 
                             {menuOpen ? (
-                                <div className="absolute right-0 top-10 z-30 w-44 rounded-xl border border-slate-200/80 bg-white/90 p-1 shadow-xl dark:border-slate-700/60 dark:bg-slate-950/90">
+                                <div className="header-menu-panel absolute right-0 top-10 z-30 w-48 rounded-xl border p-1 shadow-xl">
+                                    <button
+                                        type="button"
+                                        className="header-menu-item"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            onThemeChange(theme === 'light' ? 'dark' : 'light');
+                                        }}
+                                    >
+                                        {theme === 'light' ? <MoonStar size={14} /> : <SunMedium size={14} />}
+                                        {theme === 'light' ? 'Switch to dark' : 'Switch to light'}
+                                    </button>
                                     <button
                                         type="button"
                                         className="header-menu-item"
@@ -161,17 +192,19 @@ function ChatHeader({
                                         <CalendarClock size={14} />
                                         {showTimeline ? 'Hide timeline' : 'Show timeline'}
                                     </button>
-                                    <button
-                                        type="button"
-                                        className="header-menu-item"
-                                        onClick={() => {
-                                            setMenuOpen(false);
-                                            onOpenImport?.();
-                                        }}
-                                    >
-                                        <Upload size={14} />
-                                        Import chat
-                                    </button>
+                                    {onOpenImport ? (
+                                        <button
+                                            type="button"
+                                            className="header-menu-item"
+                                            onClick={() => {
+                                                setMenuOpen(false);
+                                                onOpenImport?.();
+                                            }}
+                                        >
+                                            <Upload size={14} />
+                                            Import chat
+                                        </button>
+                                    ) : null}
                                     <button
                                         type="button"
                                         className="header-menu-item"
@@ -199,11 +232,11 @@ function ChatHeader({
                                         className="header-menu-item"
                                         onClick={() => {
                                             setMenuOpen(false);
-                                            onToggleInsights?.();
+                                            onToggleAiPanel?.();
                                         }}
                                     >
                                         <BarChart3 size={14} />
-                                        {showInsights ? 'Close Insights' : 'View Insights'}
+                                        {aiPanelOpen ? 'Close AI Panel' : 'Open AI Panel'}
                                     </button>
                                     <button
                                         type="button"
@@ -216,6 +249,19 @@ function ChatHeader({
                                         <Download size={14} />
                                         Export PNG
                                     </button>
+                                    {onBackToHome ? (
+                                        <button
+                                            type="button"
+                                            className="header-menu-item"
+                                            onClick={() => {
+                                                setMenuOpen(false);
+                                                onBackToHome?.();
+                                            }}
+                                        >
+                                            <ArrowLeft size={14} />
+                                            Back to Home
+                                        </button>
+                                    ) : null}
                                     <button
                                         type="button"
                                         className="header-menu-item text-rose-500 dark:text-rose-300"
@@ -234,16 +280,16 @@ function ChatHeader({
                 </div>
 
                 {showSearch ? (
-                    <div className="chat-header__search flex items-center gap-1 rounded-xl border border-slate-200/80 bg-white/70 px-1.5 py-1 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/55 lg:gap-1.5">
-                        <Search size={15} className="text-slate-500 dark:text-slate-300" />
+                    <div className="chat-header__search flex items-center gap-1 rounded-xl border border-cyan-100/35 bg-slate-950/72 px-1.5 py-1 shadow-sm backdrop-blur lg:gap-1.5">
+                        <Search size={15} className="text-slate-100/80" />
                         <Input
                             value={search}
                             onChange={(event) => onSearchChange(event.target.value)}
                             onKeyDown={onSearchKeyDown}
                             placeholder="Search in conversation"
-                            className="h-7 w-full min-w-0 flex-1 border-slate-200/70 bg-white/70 text-sm text-slate-800 placeholder:text-slate-500 focus:ring-blue-200 dark:border-slate-700/70 dark:bg-slate-900/65 dark:text-slate-100 dark:placeholder:text-slate-400 lg:h-8"
+                            className="h-7 w-full min-w-0 flex-1 border-cyan-100/20 bg-black/20 text-sm text-slate-100 placeholder:text-slate-300/70 focus:ring-cyan-200/40 lg:h-8"
                         />
-                        <span className="hidden rounded-full border border-slate-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:border-slate-700/70 dark:bg-slate-900/70 dark:text-slate-200 lg:inline-flex">
+                        <span className="hidden rounded-full border border-cyan-100/25 bg-black/20 px-2.5 py-1 text-[11px] font-semibold text-slate-100 lg:inline-flex">
                             {search.trim() ? `${Math.min(activeMatchIndex + 1, resultCount || 0)}/${resultCount}` : 'Search'}
                         </span>
                         <div className="hidden items-center gap-1.5 md:inline-flex">

@@ -3,19 +3,22 @@ import { signInAnonymously } from 'firebase/auth';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { Virtuoso } from 'react-virtuoso';
-import { MessageCircleMore, X } from 'lucide-react';
+import { Bot, MessageCircleMore, Plus, Sparkles, X } from 'lucide-react';
+import { uploadFileToChat } from './firebase/fileService';
 import ChatBubble from './components/ChatBubble';
 import ChatHeader from './components/ChatHeader';
-import FileUpload from './components/FileUpload';
 import LiveComposer from './components/LiveComposer';
 import ReplayControls from './components/ReplayControls';
 import SecretLogin from './components/SecretLogin';
+import BottomSheet from './components/BottomSheet';
+import AISidePanel from './components/AISidePanel';
 import { Button } from './components/ui/button';
 import { Card, CardContent } from './components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from './components/ui/sheet';
 import {
     addMessageReaction,
     clearRoomMessages,
+    deleteRoomMessage,
     fetchOlderRoomMessages,
     hardDeleteRoomData,
     markMessageDelivered,
@@ -30,11 +33,22 @@ import {
     subscribeTypingStatus
 } from './firebase/chatService';
 import { auth, isFirebaseConfigured } from './firebase/config';
-import { summarizeMessagesWithAI } from './utils/aiSummary';
+import { getConfiguredAiProviders, summarizeMessagesWithAI } from './utils/aiSummary';
+import {
+    autoTagMessage,
+    buildMoodTimeline,
+    fetchWebContext,
+    moderateMessage,
+    runAssistantCommand,
+    semanticSearch,
+    suggestReplies,
+    summarizeConversation
+} from './services/ai';
 import { groupMessages } from './utils/groupMessages';
 import { includesQuery } from './utils/highlight';
 import { parseWhatsAppChat } from './utils/parser';
 import { decryptMessage, encryptMessage } from './utils/encryption';
+import { BRAND } from './config/branding';
 import sampleChatText from './components/Assets/sample chat.txt?raw';
 import {
     clearAuthSession,
@@ -55,7 +69,16 @@ import {
     setThemePreference,
     setUserAvatar
 } from './store/appSessionSlice';
+import { selectAuthProfile, updateUserProfile } from './store/authSlice';
 import { persistor } from './store/store';
+import { PRESET_CHAT_BACKGROUNDS } from './utils/chatBackgrounds';
+import {
+    clearOfflineMessages,
+    clearOfflineMessagesByRoom,
+    enqueueOfflineMessage,
+    getOfflineMessagesByRoom,
+    removeOfflineMessage
+} from './utils/offlineMessageQueue';
 
 const ChatInsights = lazy(() => import('./components/ChatInsights'));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel'));
@@ -79,242 +102,37 @@ const DEFAULT_USER_PROFILE_IMAGES = [
 
 const DEFAULT_HEADER_CONTACT_IMAGE = 'https://wallpapercave.com/wp/wp2746574.jpg';
 const MESSAGE_TONE_URL = import.meta.env.VITE_MESSAGE_TONE_URL || `${import.meta.env.BASE_URL}notification.mp3`;
+const ACTIVE_ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const TYPING_STALE_WINDOW_MS = 8000;
 
-const PRESET_CHAT_BACKGROUNDS = [
-    {
-        id: 'romantic-skyline',
-        label: 'Romantic Skyline',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://wallpapercave.com/wp/wp2746574.jpg'
-    },
-    {
-        id: 'soft-love-bokeh',
-        label: 'Soft Love Bokeh',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://images.unsplash.com/photo-1632060203408-851cf27a6c48?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGxvdmUlMjB3YWxscGFwZXJ8ZW58MHx8MHx8fDA%3D'
-    },
-    {
-        id: 'pink-hearts-glow',
-        label: 'Pink Hearts Glow',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://images7.alphacoders.com/939/thumb-1920-939845.jpg'
-    },
-    {
-        id: 'romantic-couple-hd',
-        label: 'Romantic Couple HD',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://img.freepik.com/premium-photo/romantic-couple-hd-8k-wallpaper-stock-photographic-image_915071-59200.jpg'
-    },
-    {
-        id: 'valentine-soft-light',
-        label: 'Valentine Soft Light',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://img.freepik.com/premium-photo/valentines-day-th-february_762785-88819.jpg'
-    },
-    {
-        id: 'romantic-desktop-art',
-        label: 'Romantic Desktop Art',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://www.wallsnapy.com/img_gallery/romantic-love-4k-desktop-background-853.jpg'
-    },
-    {
-        id: 'romantic-aurora-1697',
-        label: 'Romantic Aurora',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://4kwallpapers.com/images/walls/thumbs_2t/1697.jpg'
-    },
-    {
-        id: 'love-couple-hands',
-        label: 'Love Couple Hands',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://4kwallpapers.com/images/wallpapers/love-couple-hands-3840x2160-14351.jpg'
-    },
-    {
-        id: 'couple-background-photo',
-        label: 'Couple Background Photo',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://wallpapercat.com/w/full/8/0/a/927551-3840x2160-desktop-4k-love-couple-background-photo.jpg'
-    },
-    {
-        id: 'soft-love-pinterest',
-        label: 'Soft Love Portrait',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://i.pinimg.com/474x/f1/9f/0e/f19f0e6c0842ecf3ad887f3883752b96.jpg'
-    },
-    {
-        id: 'bridge-end-couple',
-        label: 'Bridge End Couple',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://wallpapers.com/images/hd/aesthetic-couple-in-bridge-end-vgefqbhk54e1nq4m.jpg'
-    },
-    {
-        id: 'romantic-picture-756',
-        label: 'Romantic Picture 4K',
-        mode: 'light',
-        chatMode: 'romantic',
-        url: 'https://www.wallsnapy.com/img_gallery/romantic-love-4k-desktop-picture-756.jpg'
-    },
-    {
-        id: 'deep-love-night',
-        label: 'Deep Love Night',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://wallpapercave.com/wp/wp6445768.jpg'
-    },
-    {
-        id: 'moody-pinterest-romance',
-        label: 'Moody Pinterest Romance',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://i.pinimg.com/736x/d1/db/4b/d1db4bc72fb5d2aa10bd5f94954cc3a7.jpg'
-    },
-    {
-        id: 'romantic-night-cave',
-        label: 'Romantic Night Cave',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://wallpapercave.com/wp/wp5543425.jpg'
-    },
-    {
-        id: 'dark-rose-neon',
-        label: 'Dark Rose Neon',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://images.hdqwalls.com/wallpapers/bthumb/only-you-6c.jpg'
-    },
-    {
-        id: 'romantic-afterglow-1699',
-        label: 'Romantic Afterglow',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://4kwallpapers.com/images/walls/thumbs_2t/1699.jpg'
-    },
-    {
-        id: 'romantic-night-4k',
-        label: 'Romantic Night 4K',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://4kwallpapers.com/images/wallpapers/romantic-love-5120x2880-24698.jpg'
-    },
-    {
-        id: 'dark-couple-silhouette',
-        label: 'Dark Couple Silhouette',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://img.freepik.com/free-photo/silhouetted-couple-sit-bench-autumn-tree-generative-ai_188544-12574.jpg'
-    },
-    {
-        id: 'midnight-valentine',
-        label: 'Midnight Valentine',
-        mode: 'dark',
-        chatMode: 'romantic',
-        url: 'https://www.pixelstalk.net/wp-content/uploads/images6/Love-Wallpaper-Phone-HD-Free-download.jpg'
-    },
-    // Formal Mode Light Backgrounds
-    {
-        id: 'forest-nature',
-        label: 'Forest Nature',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://wallpapercave.com/wp/wp2238948.jpg'
-    },
-    {
-        id: 'serene-nature',
-        label: 'Serene Nature',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://static.vecteezy.com/system/resources/thumbnails/049/855/471/small/nature-background-high-resolution-wallpaper-for-a-serene-and-stunning-view-free-photo.jpg'
-    },
-    {
-        id: 'brand-flowers',
-        label: 'Brand Flowers',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://microsoft.design/wp-content/uploads/2025/07/Brand-Flowers-Static-1.png'
-    },
-    {
-        id: 'beautiful-wallpaper',
-        label: 'Beautiful Wallpaper',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgKHtxBW4TSDJKRcQhlsRi_6vzxAC74O30Lce0xnTbh41XRiSH5lGl398oXrm3Y0_V0-YuiU6j7QJgAZyjitB7gcYmVCfJ7IyC_H7J_HPHRO207A_ddK8njJQPHIrwzsQoKRDEh8l0Wp_M_xvN_Nh55e7qcyAzbMdiTJd3TOXTqRanU4iasli3-f_7O6Q/s3840/BEAUTIFUL-WALLPAPER-5032023.png'
-    },
-    {
-        id: 'cute-cat',
-        label: 'Cute Cat Peek',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://wallpapers-clan.com/wp-content/uploads/2024/06/cute-cat-peeking-over-edge-desktop-wallpaper-cover.jpg'
-    },
-    {
-        id: 'desktop-classic',
-        label: 'Desktop Classic',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://www.pixelstalk.net/wp-content/uploads/images6/PC-Wallpaper-Desktop.jpg'
-    },
-    {
-        id: 'aesthetic-wallpaper',
-        label: 'Aesthetic HD',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://www.pixelstalk.net/wp-content/uploads/images6/PC-Wallpaper-HD-Aesthetic-Free-download.jpg'
-    },
-    {
-        id: 'abstract-tech',
-        label: 'Abstract Tech',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcST0n19ibRPjih9eE0m38eh20Jlc1FvjWpsDA&s'
-    },
-    {
-        id: '4k-wallpaper',
-        label: '4K Master',
-        mode: 'light',
-        chatMode: 'formal',
-        url: 'https://4kwallpapers.com/images/walls/thumbs_2t/24536.jpg'
-    },
-    // Formal Mode Dark Backgrounds
-    {
-        id: 'anime-moon',
-        label: 'Anime Moon Landscape',
-        mode: 'dark',
-        chatMode: 'formal',
-        url: 'https://img.freepik.com/free-photo/anime-moon-landscape_23-2151645871.jpg?semt=ais_incoming&w=740&q=80'
-    },
-    {
-        id: 'minimalist-dark',
-        label: 'Minimalist Design',
-        mode: 'dark',
-        chatMode: 'formal',
-        url: 'https://i.pinimg.com/originals/ec/b9/2d/ecb92d18c7855c986a5571c1b6f7cad2.jpg'
-    },
-    {
-        id: 'minimalism-4k',
-        label: 'Minimalism 4K',
-        mode: 'dark',
-        chatMode: 'formal',
-        url: 'https://c4.wallpaperflare.com/wallpaper/586/603/742/minimalism-4k-for-mac-desktop-wallpaper-preview.jpg'
-    },
-    {
-        id: 'night-ocean',
-        label: 'Night Ocean',
-        mode: 'dark',
-        chatMode: 'formal',
-        url: 'https://img.freepik.com/free-vector/night-ocean-landscape-full-moon-stars-shine_107791-7397.jpg?semt=ais_incoming&w=740&q=80'
+function timestampToMillis(value) {
+    if (!value) {
+        return 0;
     }
-];
+
+    if (typeof value === 'number') {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    if (value instanceof Date) {
+        return value.getTime();
+    }
+
+    if (typeof value?.toMillis === 'function') {
+        return value.toMillis();
+    }
+
+    if (typeof value?.toDate === 'function') {
+        return value.toDate().getTime();
+    }
+
+    return 0;
+}
 
 function getReplayDelay(message, speed) {
     const messageLength = String(message?.message || '').length;
@@ -522,6 +340,41 @@ function deriveSharedRoomId(secret) {
     return `shared-${Math.abs(hash).toString(36)}`;
 }
 
+function getRouteChatId(pathname) {
+    const match = String(pathname || '').match(/(?:^|\/)chat\/([^/]+)/);
+    return match ? decodeURIComponent(match[1] || '').trim() : '';
+}
+
+function formatFirebaseDebugError(context, error) {
+    const code = String(error?.code || 'unknown').trim();
+    const message = String(error?.message || '').trim();
+
+    if (!message) {
+        return `${context}\ncode: ${code}`;
+    }
+
+    return `${context}\ncode: ${code}\nmessage: ${message}`;
+}
+
+function createOfflineClientId() {
+    if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+
+    return `offline-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isRecoverableSendError(error) {
+    const code = String(error?.code || '').toLowerCase();
+    const message = String(error?.message || '').toLowerCase();
+
+    return (
+        (typeof window !== 'undefined' && window.navigator?.onLine === false) ||
+        ['unavailable', 'failed-precondition', 'deadline-exceeded', 'resource-exhausted', 'cancelled'].some((fragment) => code.includes(fragment)) ||
+        /offline|network|client is offline|transport|timed out|unreachable/.test(message)
+    );
+}
+
 function toChatDate(dateValue) {
     const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
     if (Number.isNaN(date.getTime())) {
@@ -551,7 +404,54 @@ function pseudonymFromUid(uidValue) {
     }
 
     const compact = safeUid.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+
     return `Member ${compact || 'USER'}`;
+}
+
+function mapQueuedMessageToUiMessage(entry, secret) {
+    const createdAtMs = Number(entry?.createdAtMs || Date.now());
+    const senderUid = String(entry?.uid || 'unknown').trim();
+    let previewText = String(entry?.previewText || '').trim();
+    let senderLabel = String(entry?.sender || '').trim();
+
+    if (!previewText && secret) {
+        try {
+            previewText = decryptMessage(String(entry?.payload?.text || ''), secret);
+        } catch {
+            previewText = '[Queued encrypted message]';
+        }
+    }
+
+    if (!senderLabel && secret) {
+        senderLabel = decryptDisplayNameSafely(entry?.payload?.senderEnc, secret);
+    }
+
+    return {
+        id: `queued-${String(entry?.clientId || entry?.id || createdAtMs)}`,
+        clientId: String(entry?.clientId || entry?.id || '').trim() || null,
+        sender: senderLabel || pseudonymFromUid(senderUid),
+        uid: senderUid,
+        message: previewText || '[Queued message]',
+        date: toChatDate(createdAtMs),
+        time: toChatTime(createdAtMs),
+        type: entry?.payload?.type || 'text',
+        replyToText: entry?.payload?.replyTo?.text || '',
+        replyToSender: entry?.payload?.replyTo?.sender || '',
+        isSystem: false,
+        reactions: {},
+        createdAtMs,
+        encrypted: true,
+        decryptionError: false,
+        deliveredTo: {
+            [senderUid]: true
+        },
+        readBy: {
+            [senderUid]: true
+        },
+        deliveryStatus: 'queued',
+        offlineQueued: true,
+        attachment: entry?.payload?.attachment || null
+    };
 }
 
 function decryptDisplayNameSafely(encryptedValue, secret) {
@@ -599,12 +499,15 @@ function mapLiveMessageToUiMessage(entry, secret, viewerUserId, resolveSenderLab
     return {
         id: `live-${entry.id}`,
         firestoreId: entry.id,
+        clientId: String(entry?.clientId || '').trim() || null,
         sender,
         uid: senderUid,
         message: text,
         date: toChatDate(createdAtDate),
         time: toChatTime(createdAtDate),
         type: entry?.type || 'text',
+        replyToText: String(entry?.replyTo?.text || '').trim(),
+        replyToSender: String(entry?.replyTo?.sender || '').trim(),
         isSystem: entry?.type === 'system',
         reactions: entry?.reactions || {},
         createdAtMs,
@@ -612,11 +515,12 @@ function mapLiveMessageToUiMessage(entry, secret, viewerUserId, resolveSenderLab
         decryptionError,
         deliveredTo,
         readBy,
-        deliveryStatus
+        deliveryStatus,
+        attachment: entry?.attachment || null
     };
 }
 
-function App() {
+function App({ onBackHome, initialChatTitle = '', initialChatId = '' }) {
     const VIRTUALIZE_THRESHOLD = 350;
     const firebaseReady = isFirebaseConfigured();
     const dispatch = useDispatch();
@@ -628,6 +532,7 @@ function App() {
     const selectedBackgroundId = useSelector(selectSelectedBackgroundId);
     const customBackgroundUrl = useSelector(selectCustomBackgroundUrl);
     const avatars = useSelector(selectAvatarPreferences);
+    const authProfile = useSelector(selectAuthProfile);
     const [authUid, setAuthUid] = useState('');
     const [authReady, setAuthReady] = useState(() => !firebaseReady);
     const [prefersDark, setPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -639,24 +544,46 @@ function App() {
     const [firebaseError, setFirebaseError] = useState('');
     const [search, setSearch] = useState('');
     const [roomId, setRoomId] = useState(() => {
+        const safeInitialChatId = String(initialChatId || '').trim();
+        if (safeInitialChatId) {
+            return safeInitialChatId;
+        }
         const fromUrl = new URLSearchParams(window.location.search).get('room');
-        return sanitizeRoomId(fromUrl || persistedRoomId || 'room1');
+        // Managed mode: derive roomId from /chat/:chatId pathname
+        const fromPath = getRouteChatId(window.location.pathname);
+        return String(fromPath || fromUrl || persistedRoomId || 'room1').trim();
     });
     const [draftMessage, setDraftMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
+    const [isOnline, setIsOnline] = useState(() => (typeof window === 'undefined' ? true : window.navigator?.onLine !== false));
     const [liveLoading, setLiveLoading] = useState(false);
+    const [pendingOutgoingMessages, setPendingOutgoingMessages] = useState([]);
+    const [isFlushingOfflineQueue, setIsFlushingOfflineQueue] = useState(false);
     const [typingUsers, setTypingUsers] = useState({});
     const [presenceUsers, setPresenceUsers] = useState({});
     const [oldestCursor, setOldestCursor] = useState(null);
     const [hasMoreHistory, setHasMoreHistory] = useState(false);
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [summary, setSummary] = useState('');
+    const [summaryProvider, setSummaryProvider] = useState('');
+    const [summaryLatencyMs, setSummaryLatencyMs] = useState(0);
     const [summaryLoading, setSummaryLoading] = useState(false);
+    const [summaryBreakdown, setSummaryBreakdown] = useState(null);
+    const [semanticQuery, setSemanticQuery] = useState('');
+    const [semanticResults, setSemanticResults] = useState([]);
+    const [semanticLoading, setSemanticLoading] = useState(false);
+    const [aiSuggestions, setAiSuggestions] = useState([]);
+    const [assistantOutput, setAssistantOutput] = useState('');
+    const [lastModerationFlag, setLastModerationFlag] = useState('');
+    const [urgencyNotice, setUrgencyNotice] = useState('');
+    const [webContext, setWebContext] = useState('');
     const [isParsing, setIsParsing] = useState(false);
     const [parseProgress, setParseProgress] = useState(0);
     const [statusMessage, setStatusMessage] = useState('');
     const [isClearingChat, setIsClearingChat] = useState(false);
     const [isDeletingChatData, setIsDeletingChatData] = useState(false);
+    const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
+    const [usernameToast, setUsernameToast] = useState(null);
     const [visibleMessages, setVisibleMessages] = useState([]);
     const [isPlaying, setIsPlaying] = useState(false);
     const [speed, setSpeed] = useState(500);
@@ -672,9 +599,21 @@ function App() {
     const [showSearch, setShowSearch] = useState(false);
     const [showTimeline, setShowTimeline] = useState(false);
     const [showInsights, setShowInsights] = useState(false);
+    const [aiPanelOpen, setAiPanelOpen] = useState(false);
+    const [mobileFabOpen, setMobileFabOpen] = useState(false);
+    const [messageActionsOpen, setMessageActionsOpen] = useState(false);
+    const [selectedMessage, setSelectedMessage] = useState(null);
+    const [replyToMessage, setReplyToMessage] = useState(null);
+    const [headerCompact, setHeaderCompact] = useState(false);
+    const [searchFilter, setSearchFilter] = useState('all');
+    const [attachmentPreview, setAttachmentPreview] = useState(null);
+    const [deletedForMeIds, setDeletedForMeIds] = useState([]);
     const [rotatingBackgroundId, setRotatingBackgroundId] = useState('');
+    const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
+    const [prefersReducedData, setPrefersReducedData] = useState(() => Boolean(window.navigator?.connection?.saveData));
     const shouldReduceMotion = useReducedMotion();
-    const hasOpenAIKey = Boolean(import.meta.env.VITE_OPENAI_API_KEY?.trim());
+    const aiProviders = useMemo(() => getConfiguredAiProviders(), []);
+    const hasCloudAiProvider = aiProviders.hasCloudProvider;
 
     const chatCaptureRef = useRef(null);
     const messageRefs = useRef({});
@@ -702,10 +641,11 @@ function App() {
     const deliveredMarkedRef = useRef(new Set());
     const readMarkedRef = useRef(new Set());
     const roomDataClearedRef = useRef(false);
+    const usernameToastTimerRef = useRef(null);
+    const flushingOfflineQueueRef = useRef(false);
 
     const authSecret = authSession?.secret || '';
     const isLoggedIn = Boolean(authSession?.displayName && authSession?.secret);
-    const userId = authUid || currentUser;
     const encryptedCurrentUserName = useMemo(() => {
         const safeCurrentUser = String(currentUser || '').trim();
         if (!safeCurrentUser || !authSecret) {
@@ -888,13 +828,56 @@ function App() {
         }
     }, [ensureNotificationAudioElement, playSynthPing]);
 
-    const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
+    const refreshOfflineQueue = useCallback(async (nextRoomId = roomId, nextAuthUid = authUid) => {
+        const safeRoomId = String(nextRoomId || '').trim();
+        const safeAuthUid = String(nextAuthUid || '').trim();
+
+        if (!safeRoomId) {
+            setPendingOutgoingMessages([]);
+            return [];
+        }
+
+        const entries = await getOfflineMessagesByRoom(safeRoomId);
+        const filteredEntries = entries.filter((item) => !safeAuthUid || String(item?.uid || '').trim() === safeAuthUid);
+        setPendingOutgoingMessages(filteredEntries);
+        return filteredEntries;
+    }, [roomId, authUid]);
+
+    const mergedMessages = useMemo(() => {
+        const liveClientIds = new Set(messages.map((message) => String(message?.clientId || '').trim()).filter(Boolean));
+        const pendingMessages = pendingOutgoingMessages
+            .filter((entry) => !liveClientIds.has(String(entry?.clientId || '').trim()))
+            .map((entry) => mapQueuedMessageToUiMessage(entry, authSecret));
+
+        const merged = [...messages, ...pendingMessages].sort((left, right) => (left.createdAtMs || 0) - (right.createdAtMs || 0));
+        if (!deletedForMeIds.length) {
+            return merged;
+        }
+
+        const hidden = new Set(deletedForMeIds);
+        return merged.filter((item) => !hidden.has(item.id));
+    }, [messages, pendingOutgoingMessages, authSecret, deletedForMeIds]);
+    const groupedMessages = useMemo(() => groupMessages(mergedMessages), [mergedMessages]);
     const replaySourceMessages = useMemo(
         () => groupedMessages.slice(replayStartIndex),
         [groupedMessages, replayStartIndex]
     );
     const displayedMessages = replayMode ? visibleMessages : groupedMessages;
     const shouldVirtualize = !replayMode && groupedMessages.length > VIRTUALIZE_THRESHOLD;
+    const virtuosoOverscan = useMemo(() => {
+        if (prefersReducedData) {
+            return 140;
+        }
+
+        return isMobileViewport ? 220 : 500;
+    }, [isMobileViewport, prefersReducedData]);
+    const virtuosoViewportBy = useMemo(() => {
+        if (prefersReducedData) {
+            return { top: 200, bottom: 260 };
+        }
+
+        return isMobileViewport ? { top: 280, bottom: 460 } : { top: 800, bottom: 1200 };
+    }, [isMobileViewport, prefersReducedData]);
     const replayDateMarkers = useMemo(
         () =>
             groupedMessages
@@ -972,6 +955,41 @@ function App() {
     }, []);
 
     useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    useEffect(() => {
+        const handleViewportResize = () => {
+            setIsMobileViewport(window.innerWidth < 768);
+            setPrefersReducedData(Boolean(window.navigator?.connection?.saveData));
+        };
+
+        handleViewportResize();
+        window.addEventListener('resize', handleViewportResize);
+
+        const connection = window.navigator?.connection;
+        if (connection?.addEventListener) {
+            connection.addEventListener('change', handleViewportResize);
+        }
+
+        return () => {
+            window.removeEventListener('resize', handleViewportResize);
+            if (connection?.removeEventListener) {
+                connection.removeEventListener('change', handleViewportResize);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
         document.documentElement.setAttribute('data-theme', resolvedTheme);
     }, [resolvedTheme]);
 
@@ -997,6 +1015,13 @@ function App() {
         if (!auth) return; // IMPORTANT safety check
 
         let cancelled = false;
+
+        // If a user is already authenticated (e.g. via Email/Password), skip anonymous sign-in.
+        if (auth.currentUser) {
+            setAuthUid(auth.currentUser.uid || '');
+            setAuthReady(true);
+            return;
+        }
 
         signInAnonymously(auth)
             .then((credential) => {
@@ -1042,9 +1067,30 @@ function App() {
     }, [dispatch, roomId]);
 
     useEffect(() => {
+        const routeChatId = getRouteChatId(window.location.pathname);
+        if (!routeChatId) {
+            return;
+        }
+
+        if (!routeChatId || routeChatId === roomId) {
+            return;
+        }
+
+        setRoomId(routeChatId);
+        dispatch(setLastRoomId(routeChatId));
+    }, [dispatch, roomId]);
+
+    useEffect(() => {
         knownLiveMessageIdsRef.current.clear();
         initialLiveSnapshotLoadedRef.current = false;
+        setHeaderCompact(false);
     }, [roomId, authUid, isLoggedIn]);
+
+    useEffect(() => {
+        refreshOfflineQueue(roomId, authUid).catch(() => {
+            setPendingOutgoingMessages([]);
+        });
+    }, [refreshOfflineQueue, roomId, authUid]);
 
     useEffect(() => {
         const handleUnlock = () => {
@@ -1072,6 +1118,11 @@ function App() {
 
     useEffect(() => {
         if (!authSession?.secret) {
+            return;
+        }
+
+        // In managed mode (/chat/:chatId), keep roomId bound to route chatId.
+        if (Boolean(getRouteChatId(window.location.pathname))) {
             return;
         }
 
@@ -1107,13 +1158,13 @@ function App() {
             return;
         }
 
-        const safeRoomId = sanitizeRoomId(roomId);
-        if (!safeRoomId || migratedRoomsRef.current.has(safeRoomId)) {
+        const scopedRoomId = String(roomId || '').trim();
+        if (!scopedRoomId || migratedRoomsRef.current.has(scopedRoomId)) {
             return;
         }
 
-        migratedRoomsRef.current.add(safeRoomId);
-        scrubLegacyRoomMetadata(safeRoomId).catch(() => {
+        migratedRoomsRef.current.add(scopedRoomId);
+        scrubLegacyRoomMetadata(scopedRoomId).catch(() => {
             // Migration is best-effort; leave chat usable if cleanup fails.
         });
     }, [firebaseReady, isLoggedIn, roomId]);
@@ -1140,6 +1191,15 @@ function App() {
                 const liveUsers = Array.from(new Set(mappedMessages.map((item) => item.sender).filter(Boolean)));
                 const hasDecryptErrors = mappedMessages.some((item) => item.decryptionError);
                 const knownIds = knownLiveMessageIdsRef.current;
+                const syncedClientIds = Array.from(new Set(mappedMessages.map((item) => String(item?.clientId || '').trim()).filter(Boolean)));
+
+                if (syncedClientIds.length) {
+                    const syncedClientIdSet = new Set(syncedClientIds);
+                    setPendingOutgoingMessages((prev) => prev.filter((item) => !syncedClientIdSet.has(String(item?.clientId || '').trim())));
+                    Promise.allSettled(syncedClientIds.map((clientId) => removeOfflineMessage(clientId))).catch(() => {
+                        // Ignore cleanup failures; queue will retry cleanup on next refresh.
+                    });
+                }
 
                 if (!initialLiveSnapshotLoadedRef.current) {
                     mappedMessages.forEach((item) => knownIds.add(item.id));
@@ -1174,8 +1234,8 @@ function App() {
                     setFirebaseError('Wrong password: unable to decrypt one or more messages.');
                 }
             },
-            () => {
-                setFirebaseError('Unable to sync messages. Check Firebase rules/config.');
+            (snapshotError) => {
+                setFirebaseError(formatFirebaseDebugError('Unable to sync messages. Check Firebase rules/config.', snapshotError));
                 setLiveLoading(false);
             }
         );
@@ -1185,8 +1245,8 @@ function App() {
             (nextTypingMap) => {
                 setTypingUsers(nextTypingMap);
             },
-            () => {
-                setFirebaseError('Typing status sync failed.');
+            (typingSyncError) => {
+                setFirebaseError(formatFirebaseDebugError('Typing status sync failed.', typingSyncError));
             }
         );
 
@@ -1195,8 +1255,8 @@ function App() {
             (nextPresenceMap) => {
                 setPresenceUsers(nextPresenceMap);
             },
-            () => {
-                setFirebaseError('Presence sync failed.');
+            (presenceSyncError) => {
+                setFirebaseError(formatFirebaseDebugError('Presence sync failed.', presenceSyncError));
             }
         );
 
@@ -1219,12 +1279,78 @@ function App() {
         };
     }, []);
 
+    const flushOfflineQueue = useCallback(async () => {
+        if (flushingOfflineQueueRef.current || !firebaseReady || !authUid || !authSecret || !roomId || !isOnline) {
+            return;
+        }
+
+        const queuedMessages = await getOfflineMessagesByRoom(roomId);
+        const scopedMessages = queuedMessages.filter((item) => String(item?.uid || '').trim() === String(authUid || '').trim());
+
+        if (!scopedMessages.length) {
+            setPendingOutgoingMessages([]);
+            return;
+        }
+
+        flushingOfflineQueueRef.current = true;
+        setIsFlushingOfflineQueue(true);
+
+        let sentCount = 0;
+        let blockedError = null;
+
+        try {
+            for (const entry of scopedMessages) {
+                try {
+                    await sendRoomMessage(roomId, entry.payload);
+                    await removeOfflineMessage(entry.id);
+                    sentCount += 1;
+                } catch (error) {
+                    blockedError = error;
+                    break;
+                }
+            }
+        } finally {
+            await refreshOfflineQueue(roomId, authUid).catch(() => {
+                // Ignore queue refresh failures during flush finalization.
+            });
+            flushingOfflineQueueRef.current = false;
+            setIsFlushingOfflineQueue(false);
+        }
+
+        if (sentCount > 0) {
+            setStatusMessage(`Sent ${sentCount} queued message${sentCount === 1 ? '' : 's'}.`);
+        }
+
+        if (blockedError) {
+            if (isRecoverableSendError(blockedError)) {
+                const remaining = await getOfflineMessagesByRoom(roomId).catch(() => []);
+                const remainingCount = remaining.filter((item) => String(item?.uid || '').trim() === String(authUid || '').trim()).length;
+                if (remainingCount > 0) {
+                    setStatusMessage(`${remainingCount} queued message${remainingCount === 1 ? '' : 's'} still waiting for a stable connection.`);
+                }
+                return;
+            }
+
+            setFirebaseError(formatFirebaseDebugError('Unable to sync queued messages.', blockedError));
+        }
+    }, [authSecret, authUid, firebaseReady, isOnline, refreshOfflineQueue, roomId]);
+
+    useEffect(() => {
+        if (!isLoggedIn || !pendingOutgoingMessages.length || !isOnline) {
+            return;
+        }
+
+        flushOfflineQueue().catch((error) => {
+            setFirebaseError(formatFirebaseDebugError('Offline queue sync failed.', error));
+        });
+    }, [flushOfflineQueue, isLoggedIn, isOnline, pendingOutgoingMessages.length]);
+
     useEffect(() => {
         if (!isLoggedIn) {
             return;
         }
 
-        if (!firebaseReady || !userId) {
+        if (!firebaseReady || !authUid) {
             return;
         }
 
@@ -1241,11 +1367,20 @@ function App() {
             }
 
             try {
-                await setRoomUserPresence(roomId, userId, online, encryptedCurrentUserName);
+                await setRoomUserPresence(roomId, authUid, online, encryptedCurrentUserName);
                 presenceOnlineRef.current = online;
                 lastPresenceWriteRef.current = nowMs;
-            } catch {
-                setFirebaseError('Unable to update online status.');
+            } catch (presenceError) {
+                const errorCode = String(presenceError?.code || '').toLowerCase();
+                const isExpectedTransientError =
+                    !window.navigator?.onLine ||
+                    errorCode.includes('permission-denied') ||
+                    errorCode.includes('unauthenticated') ||
+                    errorCode.includes('cancelled');
+
+                if (!isExpectedTransientError) {
+                    setFirebaseError(formatFirebaseDebugError('Unable to update online status.', presenceError));
+                }
             }
         };
 
@@ -1292,14 +1427,14 @@ function App() {
                 markPresence(false, { force: true });
             }
         };
-    }, [firebaseReady, roomId, userId, currentUser, authSession?.displayName, isLoggedIn, encryptedCurrentUserName]);
+    }, [firebaseReady, roomId, authUid, currentUser, authSession?.displayName, isLoggedIn, encryptedCurrentUserName]);
 
     useEffect(() => {
         if (!isLoggedIn) {
             return;
         }
 
-        if (!firebaseReady || !userId) {
+        if (!firebaseReady || !authUid) {
             return;
         }
 
@@ -1308,11 +1443,11 @@ function App() {
                 return;
             }
 
-            setTypingStatus(roomId, userId, false, encryptedCurrentUserName).catch(() => {
+            setTypingStatus(roomId, authUid, false, encryptedCurrentUserName).catch(() => {
                 // Avoid surfacing cleanup errors to users.
             });
         };
-    }, [firebaseReady, roomId, userId, currentUser, isLoggedIn, encryptedCurrentUserName]);
+    }, [firebaseReady, roomId, authUid, currentUser, isLoggedIn, encryptedCurrentUserName]);
 
     useEffect(() => {
         messageRefs.current = {};
@@ -1443,8 +1578,27 @@ function App() {
             return [];
         }
 
-        return groupedMessages.filter((msg) => includesQuery(msg.message, search)).map((msg) => msg.id);
-    }, [groupedMessages, replayMode, search]);
+        return groupedMessages
+            .filter((msg) => {
+                const text = String(msg.message || '');
+                const isMedia = msg.type === 'media' || /\.(jpg|jpeg|png|gif|webp|mp4|mov|pdf|docx?)$/i.test(text);
+                const hasLink = /(https?:\/\/|www\.)/i.test(text);
+                const userMatch = includesQuery(String(msg.sender || ''), search);
+
+                if (searchFilter === 'media') {
+                    return isMedia && includesQuery(text, search);
+                }
+                if (searchFilter === 'links') {
+                    return hasLink && includesQuery(text, search);
+                }
+                if (searchFilter === 'users') {
+                    return userMatch || includesQuery(text, search);
+                }
+
+                return includesQuery(text, search) || userMatch;
+            })
+            .map((msg) => msg.id);
+    }, [groupedMessages, replayMode, search, searchFilter]);
     const highlightedIdSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
     const messageIndexById = useMemo(() => {
         const indexMap = new Map();
@@ -1498,6 +1652,33 @@ function App() {
     useEffect(() => {
         setActiveSearchIndex(0);
     }, [search, replayMode]);
+
+    useEffect(() => {
+        if (!showSearch) {
+            setSearchFilter('all');
+        }
+    }, [showSearch]);
+
+    useEffect(() => {
+        if (!messages.length) {
+            setAiSuggestions([]);
+            return;
+        }
+
+        const timerId = window.setTimeout(() => {
+            suggestReplies(messages, currentUser)
+                .then((items) => {
+                    setAiSuggestions(Array.isArray(items) ? items.slice(0, 3) : []);
+                })
+                .catch(() => {
+                    setAiSuggestions([]);
+                });
+        }, 280);
+
+        return () => {
+            window.clearTimeout(timerId);
+        };
+    }, [messages, currentUser]);
 
     useEffect(() => {
         if (!showSearch) {
@@ -1609,7 +1790,9 @@ function App() {
 
         return orderedNames;
     }, [groupedMessages, presenceUsers, users, currentUser, authSession?.displayName, authUid, resolveLiveSenderLabel, authSecret]);
-    const otherUser = otherParticipantNames[0] || 'Waiting for others';
+    const preferredChatTitle = String(initialChatTitle || '').trim();
+    const hasUsableInitialTitle = Boolean(preferredChatTitle) && !['chat', 'direct chat', 'untitled chat'].includes(preferredChatTitle.toLowerCase());
+    const otherUser = otherParticipantNames[0] || (hasUsableInitialTitle ? preferredChatTitle : '') || 'Waiting for others';
     const contactName = otherUser;
     const contactMessages = useMemo(
         () => groupedMessages.filter((message) => message.sender === contactName),
@@ -1698,6 +1881,7 @@ function App() {
                 .map((value) => String(value || '').trim().toLowerCase())
                 .filter(Boolean)
         );
+        const now = Date.now();
 
         const liveTypingUsers = Object.entries(typingUsers)
             .filter(([uid, value]) => {
@@ -1706,6 +1890,19 @@ function App() {
                 }
 
                 if (uid === authUid) {
+                    return false;
+                }
+
+                const typingUpdatedAt = timestampToMillis(value?.updatedAt || value?.createdAt);
+                if (typingUpdatedAt && now - typingUpdatedAt > TYPING_STALE_WINDOW_MS) {
+                    return false;
+                }
+
+                const livePresence = presenceUsers?.[uid] || null;
+                const isPresenceOnline = Boolean(livePresence?.online);
+                const lastSeenAt = timestampToMillis(livePresence?.lastSeen);
+                const seenRecently = lastSeenAt > 0 && now - lastSeenAt <= ACTIVE_ONLINE_WINDOW_MS;
+                if (!isPresenceOnline && !seenRecently) {
                     return false;
                 }
 
@@ -1727,7 +1924,7 @@ function App() {
         }
 
         return `${liveTypingUsers[0]}, ${liveTypingUsers[1]} and ${liveTypingUsers.length - 2} other${liveTypingUsers.length - 2 > 1 ? 's' : ''} are typing...`;
-    }, [typingUsers, authUid, authSecret, currentUser, authSession?.displayName]);
+    }, [typingUsers, presenceUsers, authUid, authSecret, currentUser, authSession?.displayName]);
 
     const shouldRenderDateChip = (list, index) => {
         if (index === 0) {
@@ -1735,6 +1932,102 @@ function App() {
         }
         return list[index - 1]?.date !== list[index]?.date;
     };
+
+    const appendLocalSystemMessage = useCallback((text) => {
+        const safeText = String(text || '').trim();
+        if (!safeText) {
+            return;
+        }
+
+        const timestamp = Date.now();
+        setMessages((prev) => [
+            ...prev,
+            {
+                id: `system-${timestamp}`,
+                sender: 'AI Assistant',
+                uid: 'ai-assistant',
+                message: safeText,
+                date: toChatDate(timestamp),
+                time: toChatTime(timestamp),
+                isSystem: true,
+                type: 'system',
+                createdAtMs: timestamp
+            }
+        ]);
+    }, []);
+
+    const handleSemanticSearch = useCallback(async () => {
+        const query = String(semanticQuery || '').trim();
+        if (!query || !messages.length) {
+            setSemanticResults([]);
+            return;
+        }
+
+        setSemanticLoading(true);
+        try {
+            const results = await semanticSearch(messages, query, 6);
+            setSemanticResults(results);
+        } catch {
+            setSemanticResults([]);
+        } finally {
+            setSemanticLoading(false);
+        }
+    }, [messages, semanticQuery]);
+
+    useEffect(() => {
+        if (!semanticQuery.trim()) {
+            setSemanticResults([]);
+            return;
+        }
+
+        const timerId = window.setTimeout(() => {
+            handleSemanticSearch();
+        }, 260);
+
+        return () => {
+            window.clearTimeout(timerId);
+        };
+    }, [semanticQuery, handleSemanticSearch]);
+
+    const handleQuickReply = useCallback((value) => {
+        const next = String(value || '').trim();
+        if (!next) {
+            return;
+        }
+
+        setDraftMessage(next);
+    }, []);
+
+    const handleVoiceInput = useCallback(() => {
+        const RecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!RecognitionClass) {
+            setStatusMessage('Voice recognition is not available in this browser.');
+            return;
+        }
+
+        const recognition = new RecognitionClass();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event) => {
+            const transcript = event?.results?.[0]?.[0]?.transcript || '';
+            const safeTranscript = String(transcript).trim();
+            if (!safeTranscript) {
+                return;
+            }
+
+            const summary = safeTranscript.split(/\.|\?|!/).slice(0, 1).join('').trim();
+            setDraftMessage((prev) => [prev, safeTranscript].filter(Boolean).join(' ').trim());
+            setStatusMessage(summary ? `Voice captured: ${summary.slice(0, 72)}${summary.length > 72 ? '...' : ''}` : 'Voice captured.');
+        };
+
+        recognition.onerror = () => {
+            setStatusMessage('Voice capture failed. Please try again.');
+        };
+
+        recognition.start();
+    }, []);
 
     const handleParsed = (parsed, loadedFileName) => {
         if (parseFlushTimerRef.current) {
@@ -1747,6 +2040,12 @@ function App() {
         setUsers(parsed.users);
         setFileName(loadedFileName);
         setSummary('');
+        setSummaryProvider('');
+        setSummaryLatencyMs(0);
+        setSummaryBreakdown(null);
+        setSemanticResults([]);
+        setAssistantOutput('');
+        setWebContext('');
         setParseProgress(100);
         setError('');
     };
@@ -1769,6 +2068,12 @@ function App() {
         setFileName(loadedFileName || '');
         setParseProgress(0);
         setSummary('');
+        setSummaryProvider('');
+        setSummaryLatencyMs(0);
+        setSummaryBreakdown(null);
+        setSemanticResults([]);
+        setAssistantOutput('');
+        setWebContext('');
         setError('');
     }, []);
 
@@ -1938,8 +2243,8 @@ function App() {
 
         if (firebaseReady && isLoggedIn) {
             await Promise.allSettled([
-                setTypingStatus(roomId, userId, false, encryptedCurrentUserName),
-                setRoomUserPresence(roomId, userId, false, encryptedCurrentUserName)
+                setTypingStatus(roomId, authUid, false, encryptedCurrentUserName),
+                setRoomUserPresence(roomId, authUid, false, encryptedCurrentUserName)
             ]);
         }
 
@@ -1959,23 +2264,10 @@ function App() {
         dispatch(clearAuthSession());
 
         try {
+            await clearOfflineMessages();
             await persistor.purge();
         } catch {
             // Continue logout flow even if persist purge fails.
-        }
-
-        if (typeof window !== 'undefined') {
-            try {
-                window.localStorage.clear();
-            } catch {
-                // Ignore localStorage clear failures.
-            }
-
-            try {
-                window.sessionStorage.clear();
-            } catch {
-                // Ignore sessionStorage clear failures.
-            }
         }
 
         setRoomId('room1');
@@ -2022,7 +2314,7 @@ function App() {
     const handleLiveDraftChange = (nextValue) => {
         setDraftMessage(nextValue);
 
-        if (!firebaseReady || !userId) {
+        if (!firebaseReady || !authUid) {
             return;
         }
 
@@ -2040,8 +2332,8 @@ function App() {
                     window.clearTimeout(typingTimeoutRef.current);
                     typingTimeoutRef.current = null;
                 }
-                setTypingStatus(roomId, userId, false, encryptedCurrentUserName).catch(() => {
-                    setFirebaseError('Unable to update typing indicator.');
+                setTypingStatus(roomId, authUid, false, encryptedCurrentUserName).catch((typingError) => {
+                    setFirebaseError(formatFirebaseDebugError('Unable to update typing indicator.', typingError));
                 });
             }
             return;
@@ -2050,8 +2342,8 @@ function App() {
         // Only write to Firestore on transition: not typing → typing
         if (!isTypingFirestoreRef.current) {
             isTypingFirestoreRef.current = true;
-            setTypingStatus(roomId, userId, true, encryptedCurrentUserName).catch(() => {
-                setFirebaseError('Unable to update typing indicator.');
+            setTypingStatus(roomId, authUid, true, encryptedCurrentUserName).catch((typingError) => {
+                setFirebaseError(formatFirebaseDebugError('Unable to update typing indicator.', typingError));
             });
         }
 
@@ -2062,11 +2354,58 @@ function App() {
 
         typingTimeoutRef.current = window.setTimeout(() => {
             isTypingFirestoreRef.current = false;
-            setTypingStatus(roomId, userId, false, encryptedCurrentUserName).catch(() => {
-                setFirebaseError('Unable to update typing indicator.');
+            setTypingStatus(roomId, authUid, false, encryptedCurrentUserName).catch((typingError) => {
+                setFirebaseError(formatFirebaseDebugError('Unable to update typing indicator.', typingError));
             });
         }, 1500);
     };
+
+    const buildQueuedMessage = useCallback((safeText, { moderation, tags, replyTo, attachment }) => {
+        const clientId = createOfflineClientId();
+        return {
+            id: clientId,
+            clientId,
+            roomId,
+            uid: authUid,
+            sender: '',
+            previewText: '',
+            createdAtMs: Date.now(),
+            payload: {
+                text: encryptMessage(safeText, authSecret),
+                senderEnc: encryptedCurrentUserName,
+                uid: authUid,
+                type: 'text',
+                encrypted: true,
+                cipherVersion: 'aes-v1',
+                tags,
+                moderation,
+                replyTo: replyTo || null,
+                attachment: attachment || null,
+                clientId
+            }
+        };
+    }, [authSecret, authSession?.displayName, authUid, currentUser, encryptedCurrentUserName, roomId]);
+
+    const queueMessageForLater = useCallback(async (queuedMessage, notice) => {
+        await enqueueOfflineMessage(queuedMessage);
+        await refreshOfflineQueue(queuedMessage.roomId, queuedMessage.uid);
+
+        setDraftMessage('');
+        setReplyToMessage(null);
+        setAttachmentPreview(null);
+        setFirebaseError('');
+        setStatusMessage(notice || 'Message queued and will send automatically when you reconnect.');
+
+        isTypingFirestoreRef.current = false;
+        if (typingTimeoutRef.current) {
+            window.clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+        }
+
+        await setTypingStatus(roomId, authUid, false, encryptedCurrentUserName).catch(() => {
+            // Ignore typing cleanup failures while queueing offline messages.
+        });
+    }, [authUid, encryptedCurrentUserName, refreshOfflineQueue, roomId]);
 
     const handleSendLiveMessage = async () => {
         if (!firebaseReady) {
@@ -2103,23 +2442,122 @@ function App() {
         setIsSending(true);
         setFirebaseError('');
         setStatusMessage('');
+        setLastModerationFlag('');
+        setUrgencyNotice('');
+        setWebContext('');
+
         try {
-            const encryptedText = encryptMessage(safeText, authSecret);
-            await sendRoomMessage(roomId, {
-                text: encryptedText,
-                senderEnc: encryptedCurrentUserName,
-                uid: authUid,
-                type: 'text',
-                encrypted: true,
-                cipherVersion: 'aes-v1'
-            });
+            if (/^@ai\b/i.test(safeText)) {
+                if (!isOnline) {
+                    setFirebaseError('AI commands require an online connection.');
+                    return;
+                }
+
+                const assistantText = await runAssistantCommand(safeText, messages);
+                setAssistantOutput(assistantText);
+
+                const encryptedAssistant = encryptMessage(assistantText, authSecret);
+                await sendRoomMessage(roomId, {
+                    text: encryptedAssistant,
+                    senderEnc: encryptMessage('AI Assistant', authSecret),
+                    uid: 'ai-assistant',
+                    type: 'system',
+                    encrypted: true,
+                    cipherVersion: 'aes-v1'
+                });
+
+                setDraftMessage('');
+                return;
+            }
+
+            const composedText = attachmentPreview ? `${safeText}\n\n📎 ${attachmentPreview.name}` : safeText;
+            const moderation = moderateMessage(composedText);
+            const tags = autoTagMessage(composedText);
+            const replyToPayload = replyToMessage ? { sender: replyToMessage.sender, text: replyToMessage.message } : null;
+            
+            // Upload file if present and get URL
+            let attachmentData = null;
+            if (attachmentPreview?.file) {
+                try {
+                    setStatusMessage('Uploading file...');
+                    const uploadedFile = await uploadFileToChat(attachmentPreview.file, roomId, authUid);
+                    attachmentData = {
+                        url: uploadedFile.url,
+                        name: uploadedFile.name,
+                        size: uploadedFile.size,
+                        type: uploadedFile.type,
+                        path: uploadedFile.path
+                    };
+                    setStatusMessage('');
+                } catch (uploadError) {
+                    setFirebaseError(`File upload failed: ${uploadError.message}`);
+                    setIsSending(false);
+                    return;
+                }
+            } else if (attachmentPreview && !attachmentPreview.file) {
+                // Legacy support for metadata-only attachments
+                attachmentData = attachmentPreview;
+            }
+            
+            const queuedMessage = buildQueuedMessage(composedText, { moderation, tags, replyTo: replyToPayload, attachment: attachmentData || null });
+
+            if (moderation.shouldFlag) {
+                setLastModerationFlag(`Flagged (${moderation.reason || 'policy'}): message sent with moderation marker.`);
+            }
+
+            if (moderation.urgency) {
+                setUrgencyNotice('Urgent message detected. Smart notifications will prioritize this update.');
+            }
+
+            if (!isOnline) {
+                await queueMessageForLater(queuedMessage, 'You are offline. Message queued and will send automatically when you reconnect.');
+                return;
+            }
+
+            let context = '';
+            try {
+                context = await fetchWebContext(safeText);
+                if (context) {
+                    setWebContext(context);
+                }
+            } catch {
+                // Do not block message delivery if enrichment is unavailable.
+            }
+
+            await sendRoomMessage(roomId, queuedMessage.payload);
+
+            if (context) {
+                appendLocalSystemMessage(`Web context: ${context}`);
+            }
+
             setDraftMessage('');
+            setReplyToMessage(null);
+            setAttachmentPreview(null);
             await Promise.allSettled([
-                setTypingStatus(roomId, userId, false, encryptedCurrentUserName),
-                setRoomUserPresence(roomId, userId, true, encryptedCurrentUserName)
+                setTypingStatus(roomId, authUid, false, encryptedCurrentUserName),
+                setRoomUserPresence(roomId, authUid, true, encryptedCurrentUserName)
             ]);
+
+            if (window.navigator?.vibrate) {
+                window.navigator.vibrate(12);
+            }
         } catch (sendError) {
-            setFirebaseError(sendError?.message || 'Unable to send message.');
+            if (isRecoverableSendError(sendError) && !/^@ai\b/i.test(safeText)) {
+                try {
+                    const queuedMessage = buildQueuedMessage(safeText, {
+                        moderation: moderateMessage(safeText),
+                        tags: autoTagMessage(safeText),
+                        replyTo: replyToMessage ? { sender: replyToMessage.sender, text: replyToMessage.message } : null,
+                        attachment: attachmentPreview || null
+                    });
+                    await queueMessageForLater(queuedMessage, 'Connection dropped. Message queued and will send automatically when connectivity returns.');
+                    return;
+                } catch {
+                    // Fall through to the send error surface if queue creation also fails.
+                }
+            }
+
+            setFirebaseError(formatFirebaseDebugError('Unable to send message.', sendError));
         } finally {
             setIsSending(false);
         }
@@ -2157,20 +2595,30 @@ function App() {
                 typingTimeoutRef.current = null;
             }
 
-            await setTypingStatus(roomId, userId, false, encryptedCurrentUserName).catch(() => {
+            await setTypingStatus(roomId, authUid, false, encryptedCurrentUserName).catch(() => {
                 // Continue clearing messages even if typing cleanup fails.
             });
 
             await clearRoomMessages(roomId);
+            await clearOfflineMessagesByRoom(roomId).catch(() => {
+                // Ignore queue cleanup failures when clearing visible chat history.
+            });
 
             deliveredMarkedRef.current.clear();
             readMarkedRef.current.clear();
             knownLiveMessageIdsRef.current.clear();
             initialLiveSnapshotLoadedRef.current = false;
+            setPendingOutgoingMessages([]);
             setMessages([]);
             setDraftMessage('');
             setSearch('');
             setSummary('');
+            setSummaryProvider('');
+            setSummaryLatencyMs(0);
+            setSummaryBreakdown(null);
+            setSemanticResults([]);
+            setAssistantOutput('');
+            setWebContext('');
             setError('');
             setShowInsights(false);
             resetRoomTimelineState();
@@ -2214,23 +2662,34 @@ function App() {
             }
 
             await Promise.allSettled([
-                setTypingStatus(roomId, userId, false, encryptedCurrentUserName),
-                setRoomUserPresence(roomId, userId, false, encryptedCurrentUserName)
+                setTypingStatus(roomId, authUid, false, encryptedCurrentUserName),
+                setRoomUserPresence(roomId, authUid, false, encryptedCurrentUserName)
             ]);
 
             await hardDeleteRoomData(roomId);
+            await clearOfflineMessagesByRoom(roomId).catch(() => {
+                // Ignore offline queue cleanup failures during hard delete.
+            });
 
             deliveredMarkedRef.current.clear();
             readMarkedRef.current.clear();
             knownLiveMessageIdsRef.current.clear();
             initialLiveSnapshotLoadedRef.current = false;
+            setPendingOutgoingMessages([]);
             setMessages([]);
             setUsers([]);
             setTypingUsers({});
             setPresenceUsers({});
+            setPendingOutgoingMessages([]);
             setDraftMessage('');
             setSearch('');
             setSummary('');
+            setSummaryProvider('');
+            setSummaryLatencyMs(0);
+            setSummaryBreakdown(null);
+            setSemanticResults([]);
+            setAssistantOutput('');
+            setWebContext('');
             setError('');
             setShowInsights(false);
             resetRoomTimelineState();
@@ -2250,11 +2709,73 @@ function App() {
         }
 
         try {
-            await addMessageReaction(roomId, message.firestoreId, emoji);
+            await addMessageReaction(roomId, message.firestoreId, emoji, { userId: authUid });
+            if (window.navigator?.vibrate) {
+                window.navigator.vibrate(8);
+            }
         } catch {
             setFirebaseError('Unable to add reaction.');
         }
     };
+
+    const handleReplyToMessage = useCallback((message) => {
+        if (!message) {
+            return;
+        }
+
+        setReplyToMessage({
+            id: message.id,
+            sender: message.sender,
+            message: String(message.message || '').slice(0, 120)
+        });
+    }, []);
+
+    const handleOpenMessageActions = useCallback((message) => {
+        setSelectedMessage(message || null);
+        setMessageActionsOpen(Boolean(message));
+    }, []);
+
+    const handleCopyMessage = useCallback(async (message) => {
+        const safeText = String(message?.message || '').trim();
+        if (!safeText) {
+            return;
+        }
+
+        try {
+            await window.navigator?.clipboard?.writeText(safeText);
+            setStatusMessage('Message copied to clipboard.');
+        } catch {
+            setStatusMessage('Unable to copy this message.');
+        }
+    }, []);
+
+    const handleForwardMessage = useCallback((message) => {
+        const safeText = String(message?.message || '').trim();
+        if (!safeText) {
+            return;
+        }
+
+        setDraftMessage((prev) => [prev, `FWD: ${safeText}`].filter(Boolean).join('\n').trim());
+    }, []);
+
+    const handleDeleteMessage = useCallback(async (message, scope = 'me') => {
+        if (!message) {
+            return;
+        }
+
+        if (scope === 'everyone' && message.firestoreId && firebaseReady) {
+            try {
+                await deleteRoomMessage(roomId, message.firestoreId);
+                setStatusMessage('Message deleted for everyone.');
+                return;
+            } catch {
+                setFirebaseError('Unable to delete message for everyone.');
+            }
+        }
+
+        setDeletedForMeIds((prev) => Array.from(new Set([...prev, message.id])));
+        setStatusMessage('Message deleted for you.');
+    }, [firebaseReady, roomId]);
 
     const handleAvatarUpload = (user, file) => {
         if (!file) {
@@ -2298,6 +2819,55 @@ function App() {
             })
         );
     };
+
+    const showUsernameToast = useCallback((kind, text) => {
+        setUsernameToast({ kind, text });
+
+        if (usernameToastTimerRef.current) {
+            window.clearTimeout(usernameToastTimerRef.current);
+        }
+
+        usernameToastTimerRef.current = window.setTimeout(() => {
+            setUsernameToast(null);
+            usernameToastTimerRef.current = null;
+        }, 2200);
+    }, []);
+
+    const handleUsernameUpdate = async (nextUsername) => {
+        const safeValue = String(nextUsername || '').trim().replace(/[^A-Za-z0-9_]/g, '');
+        const normalized = safeValue ? `${safeValue.charAt(0).toUpperCase()}${safeValue.slice(1)}` : '';
+        if (!/^[A-Z][A-Za-z0-9_]{2,19}$/.test(normalized)) {
+            showUsernameToast('error', 'Username must be 3-20 chars, start with a capital letter, and use letters/numbers/underscore.');
+            return;
+        }
+
+        setIsUpdatingUsername(true);
+        try {
+            const result = await dispatch(updateUserProfile({ username: normalized }));
+            if (updateUserProfile.fulfilled.match(result)) {
+                const savedUsername = result.payload?.username || normalized;
+                dispatch(setCurrentUser(savedUsername));
+                if (authSession?.secret) {
+                    dispatch(setAuthSession({ displayName: savedUsername, secret: authSession.secret }));
+                }
+                showUsernameToast('success', 'Username updated successfully.');
+            } else {
+                showUsernameToast('error', result.payload || 'Unable to update username.');
+            }
+        } catch {
+            showUsernameToast('error', 'Unable to update username right now.');
+        } finally {
+            setIsUpdatingUsername(false);
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (usernameToastTimerRef.current) {
+                window.clearTimeout(usernameToastTimerRef.current);
+            }
+        };
+    }, []);
 
     const handleResetPreferences = () => {
         const shouldReset = window.confirm(
@@ -2378,6 +2948,8 @@ function App() {
     };
 
     const handleChatScroll = (event) => {
+        setHeaderCompact(event.currentTarget?.scrollTop > 36);
+
         if (!firebaseReady || replayMode || showInsights) {
             return;
         }
@@ -2404,7 +2976,7 @@ function App() {
                 pixelRatio: 2
             });
             const link = document.createElement('a');
-            link.download = `whatsapp-chat-${Date.now()}.png`;
+            link.download = `${String(BRAND.name || 'lensiq').toLowerCase()}-chat-${Date.now()}.png`;
             link.href = dataUrl;
             link.click();
         } catch (exportError) {
@@ -2415,9 +2987,21 @@ function App() {
     const handleSummarize = async () => {
         setSummaryLoading(true);
         setError('');
+        setSummaryProvider('');
+        setSummaryLatencyMs(0);
+        setSummaryBreakdown(null);
+
+        const startTime = performance.now();
         try {
-            const result = await summarizeMessagesWithAI(messages);
-            setSummary(result);
+            const [result, expanded] = await Promise.all([
+                summarizeMessagesWithAI(messages, { includeMeta: true }),
+                summarizeConversation(messages, 'all')
+            ]);
+
+            setSummary(result?.summary || 'No summary generated.');
+            setSummaryProvider(result?.provider || expanded?.provider || 'local');
+            setSummaryBreakdown(expanded?.breakdown || result?.breakdown || null);
+            setSummaryLatencyMs(Math.round(performance.now() - startTime));
         } catch (summaryError) {
             setError('Unable to generate summary right now.');
         } finally {
@@ -2471,12 +3055,13 @@ function App() {
     }
 
     return (
-        <div className="relative flex min-h-[100svh] h-[100svh] w-full flex-col overflow-hidden md:min-h-screen md:h-[100dvh]">
+        <div className="chat-special-edition relative flex min-h-[100svh] h-[100svh] w-full flex-col overflow-hidden md:min-h-screen md:h-[100dvh]">
             <div className="hero-orb left-[-90px] top-[8%] h-56 w-56 bg-slate-300/30" />
             <div className="hero-orb right-[-70px] top-[18%] h-72 w-72 bg-slate-400/25" />
 
-            <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col">
-                <main className="glass-panel-strong relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-none ambient-ring premium-panel-strong">
+            <div className="mx-auto flex h-full w-full max-w-[1720px] flex-col p-1 md:p-3">
+                <main className="chat-special-shell glass-panel-strong relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.1rem] ambient-ring premium-panel-strong md:rounded-[2rem] md:border md:border-white/20">
+                    <div className="chat-special-overlay pointer-events-none absolute inset-0 z-[1]" />
                     <div ref={chatCaptureRef} className="chat-shell-stage flex h-full min-h-0 flex-col bg-[var(--chat-shell)]">
                         <ChatHeader
                             title={contactName}
@@ -2495,10 +3080,6 @@ function App() {
                                 setSettingsSection('appearance');
                                 setSettingsOpen(true);
                             }}
-                            onOpenImport={() => {
-                                setSettingsSection('import');
-                                setSettingsOpen(true);
-                            }}
                             onOpenSummary={() => {
                                 setSettingsSection('summary');
                                 setSettingsOpen(true);
@@ -2508,8 +3089,12 @@ function App() {
                             onToggleSearch={() => setShowSearch((prev) => !prev)}
                             showTimeline={showTimeline}
                             onToggleTimeline={handleToggleTimeline}
-                            showInsights={showInsights}
-                            onToggleInsights={() => setShowInsights((prev) => !prev)}
+                            showInsights={aiPanelOpen}
+                            onToggleInsights={() => setAiPanelOpen((prev) => !prev)}
+                            aiPanelOpen={aiPanelOpen}
+                            onToggleAiPanel={() => setAiPanelOpen((prev) => !prev)}
+                            compact={headerCompact}
+                            onBackToHome={onBackHome}
                             onLogout={handleLogout}
                         />
                         <ReplayControls
@@ -2536,13 +3121,8 @@ function App() {
                             onSpeedChange={setSpeed}
                         />
 
-                        <section
-                            ref={chatScrollRef}
-                            className="chat-wallpaper scroll-thin relative flex-1 overflow-x-hidden overflow-y-auto px-4 pb-16 pt-4 md:px-6 md:pb-20 md:pt-6"
-                            onScroll={handleChatScroll}
-                            onClick={handleChatSurfaceToggleReplay}
-                            onTouchStart={handleThemeSwipeStart}
-                            onTouchEnd={handleThemeSwipeEnd}
+                        <div
+                            className="chat-wallpaper relative flex min-h-0 flex-1 flex-col overflow-hidden"
                             style={{
                                 backgroundImage: `url(${activeChatBackground}), var(--wallpaper-pattern), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))`,
                                 '--chat-photo-size': 'cover',
@@ -2559,234 +3139,412 @@ function App() {
                                 '--bubble-received-shadow': backgroundTheme.receivedShadow
                             }}
                         >
-                            <div className="relative z-10 mx-auto w-full md:max-w-4xl">
-                                {firebaseReady && hasMoreHistory ? (
-                                    <div className="mb-2 flex justify-center">
-                                        <Button
-                                            type="button"
-                                            variant="secondary"
-                                            onClick={handleLoadOlderMessages}
-                                            disabled={loadingOlder}
-                                            className="h-8 px-3 text-xs"
-                                        >
-                                            {loadingOlder ? 'Loading older...' : 'Load older messages'}
-                                        </Button>
+                            <section
+                                ref={chatScrollRef}
+                                className="scroll-thin relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-4 pt-3 sm:px-4 md:px-6 md:pb-6 md:pt-6"
+                                onScroll={handleChatScroll}
+                                onClick={handleChatSurfaceToggleReplay}
+                                onTouchStart={handleThemeSwipeStart}
+                                onTouchEnd={handleThemeSwipeEnd}
+                            >
+                                <div className="relative z-10 mx-auto w-full md:max-w-4xl">
+                                    {firebaseReady && hasMoreHistory ? (
+                                        <div className="mb-2 flex justify-center">
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={handleLoadOlderMessages}
+                                                disabled={loadingOlder}
+                                                className="h-8 px-3 text-xs"
+                                            >
+                                                {loadingOlder ? 'Loading older...' : 'Load older messages'}
+                                            </Button>
+                                        </div>
+                                    ) : null}
+
+                                    {showSearch ? (
+                                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                            {[
+                                                { id: 'all', label: 'All' },
+                                                { id: 'media', label: 'Media' },
+                                                { id: 'links', label: 'Links' },
+                                                { id: 'users', label: 'Users' }
+                                            ].map((item) => (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    onClick={() => setSearchFilter(item.id)}
+                                                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${searchFilter === item.id
+                                                        ? 'border-cyan-200/60 bg-cyan-300/20 text-cyan-50'
+                                                        : 'border-white/20 bg-black/20 text-slate-200'
+                                                        }`}
+                                                >
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : null}
+
+                                    {showInsights ? (
+                                        <div className="relative">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setShowInsights(false)}
+                                                className="header-icon-button absolute right-2 top-2 z-20 h-9 w-9 bg-white/78 dark:bg-slate-950/72"
+                                                aria-label="Close analysis and return to chat"
+                                                title="Close analysis"
+                                            >
+                                                <X size={16} />
+                                            </Button>
+                                            <Suspense
+                                                fallback={(
+                                                    <div className="glass-panel rounded-[1.2rem] p-6 text-sm text-[var(--text-muted)]">
+                                                        Loading analysis...
+                                                    </div>
+                                                )}
+                                            >
+                                                <ChatInsights messages={messages} />
+                                            </Suspense>
+                                        </div>
+                                    ) : groupedMessages.length === 0 && isParsing ? (
+                                        <div className="flex h-full min-h-[42vh] items-center justify-center px-4 text-center">
+                                            <motion.div
+                                                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="glass-panel max-w-xl rounded-[1.4rem] p-6"
+                                            >
+                                                <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 text-[var(--accent)]">
+                                                    <MessageCircleMore size={30} />
+                                                </span>
+                                                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                                                    Parsing In Background
+                                                </p>
+                                                <h2 className="mt-2 text-xl font-bold text-[var(--text-main)]">
+                                                    Import running smoothly. You can keep using settings while messages load.
+                                                </h2>
+                                                <p className="mt-2 text-sm leading-5 text-[var(--text-muted)]">
+                                                    Progress: {parseProgress}%
+                                                </p>
+                                                <div className="mx-auto mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-[var(--panel-soft)]">
+                                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400/80 to-cyan-400/80" style={{ width: `${parseProgress}%` }} />
+                                                </div>
+                                            </motion.div>
+                                        </div>
+                                    ) : groupedMessages.length === 0 ? (
+                                        <div className="flex h-full min-h-[42vh] items-center justify-center px-4 text-center">
+                                            <motion.div
+                                                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="chat-empty-card glass-panel max-w-xl rounded-[1.4rem] p-6"
+                                            >
+                                                <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 text-[var(--accent)]">
+                                                    <MessageCircleMore size={30} />
+                                                </span>
+                                                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                                                    {firebaseReady && isLoggedIn ? 'No Messages Yet' : 'Start Here'}
+                                                </p>
+                                                <h2 className="mt-2 text-xl font-bold text-[var(--text-main)]">
+                                                    {firebaseReady && isLoggedIn
+                                                        ? 'No messages yet'
+                                                        : 'Bring your WhatsApp export into a refined full-screen chat workspace.'}
+                                                </h2>
+                                                <p className="mt-2 text-sm leading-5 text-[var(--text-muted)]">
+                                                    {firebaseReady && isLoggedIn
+                                                        ? 'Send a new message to start the room again, or import a conversation from settings.'
+                                                        : 'Use the settings or more menu in the header to import files, customize visuals, and generate summaries.'}
+                                                </p>
+                                            </motion.div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {isParsing ? (
+                                                <motion.div
+                                                    layout={!shouldReduceMotion}
+                                                    initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="sticky top-2 z-20 mx-auto mb-3 w-fit rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-semibold text-emerald-100 backdrop-blur"
+                                                >
+                                                    Parsing {parseProgress}% • {groupedMessages.length} messages loaded
+                                                </motion.div>
+                                            ) : null}
+
+                                            {shouldVirtualize ? (
+                                                <Virtuoso
+                                                    ref={virtuosoRef}
+                                                    data={displayedMessages}
+                                                    customScrollParent={chatScrollRef.current || undefined}
+                                                    overscan={virtuosoOverscan}
+                                                    increaseViewportBy={virtuosoViewportBy}
+                                                    itemContent={(index, message) => {
+                                                        const isCurrentUser = (Boolean(authUid) && message.uid === authUid) || (currentUser && message.sender === currentUser);
+                                                        const showDateChip = shouldRenderDateChip(displayedMessages, index);
+
+                                                        return (
+                                                            <div className="px-1">
+                                                                {showDateChip ? (
+                                                                    <div className="my-2.5 flex justify-center">
+                                                                        <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
+                                                                            {message.date}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : null}
+
+                                                                <ChatBubble
+                                                                    message={message}
+                                                                    isCurrentUser={isCurrentUser}
+                                                                    currentUser={currentUser}
+                                                                    avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
+                                                                    query={search}
+                                                                    isMatch={highlightedIdSet.has(message.id) || activeSearchId === message.id}
+                                                                    animateEntry={false}
+                                                                    onAddReaction={handleAddReaction}
+                                                                    onReply={handleReplyToMessage}
+                                                                    onOpenMessageActions={handleOpenMessageActions}
+                                                                    onReplayFrom={() => {
+                                                                        const nextIndex = Math.max(index, 0);
+                                                                        setReplaySegment('from-here');
+                                                                        setScrubValue(nextIndex);
+                                                                        startReplay(nextIndex);
+                                                                    }}
+                                                                    messageRef={(node) => {
+                                                                        if (node) {
+                                                                            messageRefs.current[message.id] = node;
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }}
+                                                />
+                                            ) : (
+                                                <AnimatePresence initial={false} mode="popLayout">
+                                                    {displayedMessages.map((message, index) => {
+                                                        const isCurrentUser = (Boolean(authUid) && message.uid === authUid) || (currentUser && message.sender === currentUser);
+                                                        const isMatch = highlightedIds.includes(message.id);
+                                                        const showDateChip = shouldRenderDateChip(displayedMessages, index);
+
+                                                        const sourceIndex = groupedMessages.findIndex((item) => item.id === message.id);
+
+                                                        return (
+                                                            <motion.div
+                                                                layout={!shouldReduceMotion}
+                                                                key={`${message.id}-wrapper`}
+                                                                initial={replayMode && !shouldReduceMotion ? { opacity: 0, y: 10 } : false}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.25, ease: 'easeOut' }}
+                                                            >
+                                                                {showDateChip ? (
+                                                                    <motion.div layout={!shouldReduceMotion} className="my-2.5 flex justify-center">
+                                                                        <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
+                                                                            {message.date}
+                                                                        </span>
+                                                                    </motion.div>
+                                                                ) : null}
+
+                                                                <ChatBubble
+                                                                    message={message}
+                                                                    isCurrentUser={isCurrentUser}
+                                                                    currentUser={currentUser}
+                                                                    avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
+                                                                    query={search}
+                                                                    isMatch={isMatch || activeSearchId === message.id}
+                                                                    animateEntry={replayMode}
+                                                                    onAddReaction={handleAddReaction}
+                                                                    onReply={handleReplyToMessage}
+                                                                    onOpenMessageActions={handleOpenMessageActions}
+                                                                    onReplayFrom={() => {
+                                                                        const nextIndex = Math.max(sourceIndex, 0);
+                                                                        setReplaySegment('from-here');
+                                                                        setScrubValue(nextIndex);
+                                                                        startReplay(nextIndex);
+                                                                    }}
+                                                                    messageRef={(node) => {
+                                                                        if (node) {
+                                                                            messageRefs.current[message.id] = node;
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </motion.div>
+                                                        );
+                                                    })}
+                                                </AnimatePresence>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+                                {isTyping && replayMode ? (
+                                    <div className="my-1.5 flex justify-start fade-slide-in">
+                                        <div className="ml-8 flex items-center gap-1.5 rounded-[1rem] border border-[var(--border-soft)] bg-[var(--system-chip)] px-3 py-2 shadow-sm">
+                                            <span className="typing-bubble-dot" />
+                                            <span className="typing-bubble-dot" />
+                                            <span className="typing-bubble-dot" />
+                                        </div>
                                     </div>
                                 ) : null}
 
-                                {showInsights ? (
-                                    <div className="relative">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => setShowInsights(false)}
-                                            className="header-icon-button absolute right-2 top-2 z-20 h-9 w-9 bg-white/78 dark:bg-slate-950/72"
-                                            aria-label="Close analysis and return to chat"
-                                            title="Close analysis"
-                                        >
-                                            <X size={16} />
-                                        </Button>
-                                        <Suspense
-                                            fallback={(
-                                                <div className="glass-panel rounded-[1.2rem] p-6 text-sm text-[var(--text-muted)]">
-                                                    Loading analysis...
-                                                </div>
-                                            )}
-                                        >
-                                            <ChatInsights messages={messages} />
-                                        </Suspense>
-                                    </div>
-                                ) : groupedMessages.length === 0 && isParsing ? (
-                                    <div className="flex h-full min-h-[42vh] items-center justify-center px-4 text-center">
-                                        <motion.div
-                                            initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="glass-panel max-w-xl rounded-[1.4rem] p-6"
-                                        >
-                                            <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 text-[var(--accent)]">
-                                                <MessageCircleMore size={30} />
-                                            </span>
-                                            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                                                Parsing In Background
-                                            </p>
-                                            <h2 className="mt-2 text-xl font-bold text-[var(--text-main)]">
-                                                Import running smoothly. You can keep using settings while messages load.
-                                            </h2>
-                                            <p className="mt-2 text-sm leading-5 text-[var(--text-muted)]">
-                                                Progress: {parseProgress}%
-                                            </p>
-                                            <div className="mx-auto mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-[var(--panel-soft)]">
-                                                <div className="h-full rounded-full bg-gradient-to-r from-emerald-400/80 to-cyan-400/80" style={{ width: `${parseProgress}%` }} />
-                                            </div>
-                                        </motion.div>
-                                    </div>
-                                ) : groupedMessages.length === 0 ? (
-                                    <div className="flex h-full min-h-[42vh] items-center justify-center px-4 text-center">
-                                        <motion.div
-                                            initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="glass-panel max-w-xl rounded-[1.4rem] p-6"
-                                        >
-                                            <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 text-[var(--accent)]">
-                                                <MessageCircleMore size={30} />
-                                            </span>
-                                            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--text-muted)]">
-                                                {firebaseReady && isLoggedIn ? 'No Messages Yet' : 'Start Here'}
-                                            </p>
-                                            <h2 className="mt-2 text-xl font-bold text-[var(--text-main)]">
-                                                {firebaseReady && isLoggedIn
-                                                    ? 'No messages yet'
-                                                    : 'Bring your WhatsApp export into a refined full-screen chat workspace.'}
-                                            </h2>
-                                            <p className="mt-2 text-sm leading-5 text-[var(--text-muted)]">
-                                                {firebaseReady && isLoggedIn
-                                                    ? 'Send a new message to start the room again, or import a conversation from settings.'
-                                                    : 'Use the settings or more menu in the header to import files, customize visuals, and generate summaries.'}
-                                            </p>
-                                        </motion.div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {isParsing ? (
-                                            <motion.div
-                                                layout={!shouldReduceMotion}
-                                                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className="sticky top-2 z-20 mx-auto mb-3 w-fit rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-semibold text-emerald-100 backdrop-blur"
-                                            >
-                                                Parsing {parseProgress}% • {groupedMessages.length} messages loaded
-                                            </motion.div>
-                                        ) : null}
+                                <div ref={bottomAnchorRef} />
+                            </section>
 
-                                        {shouldVirtualize ? (
-                                            <Virtuoso
-                                                ref={virtuosoRef}
-                                                data={displayedMessages}
-                                                customScrollParent={chatScrollRef.current || undefined}
-                                                overscan={500}
-                                                increaseViewportBy={{ top: 800, bottom: 1200 }}
-                                                itemContent={(index, message) => {
-                                                    const isCurrentUser = (Boolean(authUid) && message.uid === authUid) || (currentUser && message.sender === currentUser);
-                                                    const showDateChip = shouldRenderDateChip(displayedMessages, index);
-
-                                                    return (
-                                                        <div className="px-1">
-                                                            {showDateChip ? (
-                                                                <div className="my-2.5 flex justify-center">
-                                                                    <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
-                                                                        {message.date}
-                                                                    </span>
-                                                                </div>
-                                                            ) : null}
-
-                                                            <ChatBubble
-                                                                message={message}
-                                                                isCurrentUser={isCurrentUser}
-                                                                currentUser={currentUser}
-                                                                avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
-                                                                query={search}
-                                                                isMatch={highlightedIdSet.has(message.id) || activeSearchId === message.id}
-                                                                animateEntry={false}
-                                                                onAddReaction={handleAddReaction}
-                                                                onReplayFrom={() => {
-                                                                    const nextIndex = Math.max(index, 0);
-                                                                    setReplaySegment('from-here');
-                                                                    setScrubValue(nextIndex);
-                                                                    startReplay(nextIndex);
-                                                                }}
-                                                                messageRef={(node) => {
-                                                                    if (node) {
-                                                                        messageRefs.current[message.id] = node;
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    );
-                                                }}
-                                            />
-                                        ) : (
-                                            <AnimatePresence initial={false} mode="popLayout">
-                                                {displayedMessages.map((message, index) => {
-                                                    const isCurrentUser = (Boolean(authUid) && message.uid === authUid) || (currentUser && message.sender === currentUser);
-                                                    const isMatch = highlightedIds.includes(message.id);
-                                                    const showDateChip = shouldRenderDateChip(displayedMessages, index);
-
-                                                    const sourceIndex = groupedMessages.findIndex((item) => item.id === message.id);
-
-                                                    return (
-                                                        <motion.div
-                                                            layout={!shouldReduceMotion}
-                                                            key={`${message.id}-wrapper`}
-                                                            initial={replayMode && !shouldReduceMotion ? { opacity: 0, y: 10 } : false}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.25, ease: 'easeOut' }}
-                                                        >
-                                                            {showDateChip ? (
-                                                                <motion.div layout={!shouldReduceMotion} className="my-2.5 flex justify-center">
-                                                                    <span className="rounded-full border border-[var(--border-soft)] bg-[var(--date-chip)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)] shadow-sm">
-                                                                        {message.date}
-                                                                    </span>
-                                                                </motion.div>
-                                                            ) : null}
-
-                                                            <ChatBubble
-                                                                message={message}
-                                                                isCurrentUser={isCurrentUser}
-                                                                currentUser={currentUser}
-                                                                avatar={avatars[message.sender] || defaultAvatarMap[message.sender]}
-                                                                query={search}
-                                                                isMatch={isMatch || activeSearchId === message.id}
-                                                                animateEntry={replayMode}
-                                                                onAddReaction={handleAddReaction}
-                                                                onReplayFrom={() => {
-                                                                    const nextIndex = Math.max(sourceIndex, 0);
-                                                                    setReplaySegment('from-here');
-                                                                    setScrubValue(nextIndex);
-                                                                    startReplay(nextIndex);
-                                                                }}
-                                                                messageRef={(node) => {
-                                                                    if (node) {
-                                                                        messageRefs.current[message.id] = node;
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </motion.div>
-                                                    );
-                                                })}
-                                            </AnimatePresence>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-
-                            {isTyping && replayMode ? (
-                                <div className="my-1.5 flex justify-start fade-slide-in">
-                                    <div className="ml-8 flex items-center gap-1.5 rounded-[1rem] border border-[var(--border-soft)] bg-[var(--system-chip)] px-3 py-2 shadow-sm">
-                                        <span className="typing-bubble-dot" />
-                                        <span className="typing-bubble-dot" />
-                                        <span className="typing-bubble-dot" />
-                                    </div>
-                                </div>
-                            ) : null}
-
-                            <div ref={bottomAnchorRef} />
-                        </section>
+                            <LiveComposer
+                                messageValue={draftMessage}
+                                onMessageChange={handleLiveDraftChange}
+                                onSendMessage={handleSendLiveMessage}
+                                typingText={typingIndicatorText}
+                                disabled={!draftMessage.trim() || !firebaseReady}
+                                isSending={isSending}
+                                isOnline={isOnline}
+                                queuedCount={pendingOutgoingMessages.length}
+                                isQueueSyncing={isFlushingOfflineQueue}
+                                isFirebaseReady={firebaseReady}
+                                isLoading={liveLoading}
+                                encryptedLabel="🔒 Encrypted chat"
+                                quickReplies={aiSuggestions}
+                                onQuickReply={handleQuickReply}
+                                onVoiceInput={handleVoiceInput}
+                                replyTo={replyToMessage}
+                                onCancelReply={() => setReplyToMessage(null)}
+                                attachmentPreview={attachmentPreview}
+                                onAttachmentChange={setAttachmentPreview}
+                            />
+                        </div>
                     </div>
+
+                    <AISidePanel
+                        open={aiPanelOpen}
+                        onOpenChange={setAiPanelOpen}
+                        isMobile={isMobileViewport}
+                        summary={summary}
+                        summaryLoading={summaryLoading}
+                        summaryProvider={summaryProvider}
+                        summaryLatencyMs={summaryLatencyMs}
+                        summaryBreakdown={summaryBreakdown}
+                        aiSuggestions={aiSuggestions}
+                        onSummarize={handleSummarize}
+                    />
                 </main>
 
-                <LiveComposer
-                    messageValue={draftMessage}
-                    onMessageChange={handleLiveDraftChange}
-                    onSendMessage={handleSendLiveMessage}
-                    typingText={typingIndicatorText}
-                    disabled={!draftMessage.trim() || !firebaseReady}
-                    isSending={isSending}
-                    isFirebaseReady={firebaseReady}
-                    isLoading={liveLoading}
-                    encryptedLabel="🔒 Encrypted chat"
-                    chatBackground={activeChatBackground}
-                />
+                <div className="pointer-events-none fixed bottom-24 right-4 z-40 md:hidden">
+                    <Button
+                        type="button"
+                        onClick={() => setMobileFabOpen(true)}
+                        className="pointer-events-auto h-12 w-12 rounded-full bg-gradient-to-br from-cyan-300 to-emerald-300 p-0 text-slate-900 shadow-[0_14px_28px_rgba(16,185,129,0.32)] hover:scale-105 md:h-14 md:w-14"
+                        aria-label="Open quick actions"
+                    >
+                        <Plus size={20} />
+                    </Button>
+                </div>
+
+                <BottomSheet open={mobileFabOpen} onOpenChange={setMobileFabOpen} title="Quick actions">
+                    <div className="space-y-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setDraftMessage('@AI summarize');
+                                setMobileFabOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-[var(--text-main)]"
+                        >
+                            <Sparkles size={15} />
+                            Ask AI to summarize
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAiPanelOpen(true);
+                                setMobileFabOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-[var(--text-main)]"
+                        >
+                            <Bot size={15} />
+                            Open AI side panel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSettingsSection('appearance');
+                                setSettingsOpen(true);
+                                setMobileFabOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-[var(--text-main)]"
+                        >
+                            <MessageCircleMore size={15} />
+                            Open settings
+                        </button>
+                    </div>
+                </BottomSheet>
+
+                <BottomSheet open={messageActionsOpen} onOpenChange={setMessageActionsOpen} title="Message actions">
+                    <div className="space-y-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleReplyToMessage(selectedMessage);
+                                setMessageActionsOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-[var(--text-main)]"
+                        >
+                            Reply
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleCopyMessage(selectedMessage);
+                                setMessageActionsOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-[var(--text-main)]"
+                        >
+                            Copy
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleForwardMessage(selectedMessage);
+                                setMessageActionsOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-[var(--text-main)]"
+                        >
+                            Forward
+                        </button>
+                        <div className="grid grid-cols-5 gap-2">
+                            {['👍', '❤️', '😂', '🔥', '👏'].map((emoji) => (
+                                <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => {
+                                        handleAddReaction(selectedMessage, emoji);
+                                        setMessageActionsOpen(false);
+                                    }}
+                                    className="inline-flex h-10 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-xl"
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleDeleteMessage(selectedMessage, 'me');
+                                setMessageActionsOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-amber-200"
+                        >
+                            Delete for me
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleDeleteMessage(selectedMessage, 'everyone');
+                                setMessageActionsOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-left text-sm text-rose-200"
+                        >
+                            Delete for everyone
+                        </button>
+                    </div>
+                </BottomSheet>
 
                 {error ? (
                     <p className="mt-1.5 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-[var(--error-text)] shadow-sm">
@@ -2795,7 +3553,7 @@ function App() {
                 ) : null}
 
                 {firebaseError ? (
-                    <p className="mt-1.5 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100 shadow-sm">
+                    <p className="mt-1.5 whitespace-pre-wrap break-words rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100 shadow-sm">
                         {firebaseError}
                     </p>
                 ) : null}
@@ -2806,47 +3564,71 @@ function App() {
                     </p>
                 ) : null}
 
+                {lastModerationFlag ? (
+                    <p className="mt-1.5 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100 shadow-sm">
+                        {lastModerationFlag}
+                    </p>
+                ) : null}
+
+                {urgencyNotice ? (
+                    <p className="mt-1.5 rounded-xl border border-rose-400/35 bg-rose-500/10 p-3 text-sm text-rose-100 shadow-sm">
+                        {urgencyNotice}
+                    </p>
+                ) : null}
+
+                {assistantOutput ? (
+                    <p className="mt-1.5 whitespace-pre-wrap rounded-xl border border-cyan-400/30 bg-cyan-500/10 p-3 text-sm text-cyan-100 shadow-sm">
+                        {assistantOutput}
+                    </p>
+                ) : null}
+
+                {webContext ? (
+                    <p className="mt-1.5 whitespace-pre-wrap rounded-xl border border-sky-400/30 bg-sky-500/10 p-3 text-sm text-sky-100 shadow-sm">
+                        {webContext}
+                    </p>
+                ) : null}
+
+                {usernameToast ? (
+                    <div className="pointer-events-none fixed bottom-5 right-5 z-50">
+                        <div
+                            className={`rounded-xl border px-3 py-2 text-sm shadow-lg backdrop-blur ${usernameToast.kind === 'success'
+                                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-100'
+                                : 'border-red-400/40 bg-red-500/15 text-red-100'
+                                }`}
+                        >
+                            {usernameToast.text}
+                        </div>
+                    </div>
+                ) : null}
+
                 <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-                    <SheetContent side="right" className="w-full max-w-[420px] p-3 md:p-4">
-                        <SheetHeader>
-                            <SheetTitle>Workspace Settings</SheetTitle>
-                            <SheetDescription>Control theme, participants, visuals, and export options.</SheetDescription>
-                        </SheetHeader>
-
-                        <div className="scroll-thin max-h-[calc(100vh-100px)] space-y-3 overflow-y-auto pr-1">
-                            <div className="segmented-control inline-flex w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel)] p-1" role="tablist" aria-label="Settings sections">
-                                {[
-                                    { value: 'import', label: 'Import' },
-                                    { value: 'summary', label: 'Summary' },
-                                    { value: 'appearance', label: 'Appearance' },
-                                    { value: 'participants', label: 'Participants' },
-                                    { value: 'export', label: 'Export' }
-                                ].map((item) => (
-                                    <button
-                                        key={item.value}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={settingsSection === item.value}
-                                        onClick={() => setSettingsSection(item.value)}
-                                        className={`segmented-control__item ${settingsSection === item.value ? 'segmented-control__item--active' : ''}`}
-                                    >
-                                        {item.label}
-                                    </button>
-                                ))}
+                    <SheetContent side="right" className="w-full max-w-[420px] p-2.5 md:p-4">
+                        <div className="scroll-thin min-h-0 h-[calc(100dvh-108px)] md:h-[calc(100dvh-118px)] space-y-3 overflow-y-auto overscroll-contain pr-1">
+                            <div className="sticky top-0 z-30 -mx-1 space-y-2 bg-[var(--panel-strong)]/95 px-1 pb-2 backdrop-blur supports-[backdrop-filter]:bg-[var(--panel-strong)]/80">
+                                <SheetHeader className="mb-0">
+                                    <SheetTitle>Workspace Settings</SheetTitle>
+                                    <SheetDescription>Control theme, participants, visuals, and export options.</SheetDescription>
+                                </SheetHeader>
+                                <div className="segmented-control inline-flex w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel)] p-1" role="tablist" aria-label="Settings sections">
+                                    {[
+                                        { value: 'summary', label: 'Summary' },
+                                        { value: 'appearance', label: 'Appearance' },
+                                        { value: 'participants', label: 'Participants' },
+                                        { value: 'export', label: 'Export' }
+                                    ].map((item) => (
+                                        <button
+                                            key={item.value}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={settingsSection === item.value}
+                                            onClick={() => setSettingsSection(item.value)}
+                                            className={`segmented-control__item ${settingsSection === item.value ? 'segmented-control__item--active' : ''}`}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-
-                            {settingsSection === 'import' ? (
-                                <FileUpload
-                                    onParsed={handleParsed}
-                                    onParseChunk={handleParseChunk}
-                                    onParseProgress={setParseProgress}
-                                    onParseStart={handleParseStart}
-                                    onError={setError}
-                                    fileName={fileName}
-                                    isParsing={isParsing}
-                                    onParsingChange={setIsParsing}
-                                />
-                            ) : null}
 
                             {settingsSection === 'summary' ? (
                                 <Card className="ambient-ring premium-panel rounded-[1.7rem]">
@@ -2863,19 +3645,109 @@ function App() {
                                             </Button>
                                         </div>
 
-                                        {!hasOpenAIKey ? (
+                                        {!hasCloudAiProvider ? (
                                             <p className="mt-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200/90">
-                                                OpenAI API key is not configured. Summary will try local Ollama first, then built-in local analysis.
+                                                AI gateway is not configured. The app uses Ollama/local fallbacks when cloud providers are unavailable.
                                             </p>
                                         ) : null}
 
                                         {summary ? (
-                                            <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--text-main)]/85">{summary}</pre>
+                                            <>
+                                                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+                                                    {summaryProvider ? (
+                                                        <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+                                                            Provider: {summaryProvider}
+                                                        </span>
+                                                    ) : null}
+                                                    {summaryLatencyMs > 0 ? (
+                                                        <span className="rounded-full border border-slate-300/30 bg-white/10 px-2 py-0.5 text-[var(--text-muted)]">
+                                                            Generated in {summaryLatencyMs}ms
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--text-main)]/85">{summary}</pre>
+
+                                                {summaryBreakdown?.keyPoints?.length ? (
+                                                    <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] p-3">
+                                                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Key Points</p>
+                                                        <ul className="mt-2 space-y-1 text-sm text-[var(--text-main)]/85">
+                                                            {summaryBreakdown.keyPoints.slice(0, 6).map((item) => (
+                                                                <li key={item}>• {item}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                ) : null}
+
+                                                {summaryBreakdown?.decisions?.length ? (
+                                                    <div className="mt-3 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] p-3">
+                                                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Decisions</p>
+                                                        <ul className="mt-2 space-y-1 text-sm text-[var(--text-main)]/85">
+                                                            {summaryBreakdown.decisions.slice(0, 6).map((item) => (
+                                                                <li key={item}>• {item}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                ) : null}
+                                            </>
                                         ) : (
                                             <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
                                                 Generate a concise overview of participants, trends, and key moments.
                                             </p>
                                         )}
+
+                                        <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] p-3">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Semantic Search</p>
+                                            <div className="mt-2 flex items-center gap-2">
+                                                <input
+                                                    value={semanticQuery}
+                                                    onChange={(event) => setSemanticQuery(event.target.value)}
+                                                    placeholder="Search by meaning, not just keywords"
+                                                    className="input-surface h-9 text-sm"
+                                                />
+                                                <Button type="button" variant="secondary" onClick={handleSemanticSearch} disabled={semanticLoading || !semanticQuery.trim()}>
+                                                    {semanticLoading ? 'Searching...' : 'Search'}
+                                                </Button>
+                                            </div>
+
+                                            {semanticResults.length ? (
+                                                <div className="mt-3 space-y-2">
+                                                    {semanticResults.slice(0, 5).map((item) => (
+                                                        <div key={item.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--panel)] px-3 py-2">
+                                                            <p className="text-xs text-[var(--text-muted)]">{item.sender} • {item.date} {item.time}</p>
+                                                            <p className="text-sm text-[var(--text-main)]/85">{item.text}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                        </div>
+
+                                        {summaryBreakdown?.daily?.length ? (
+                                            <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] p-3">
+                                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Daily Summaries</p>
+                                                <div className="mt-2 space-y-2">
+                                                    {summaryBreakdown.daily.slice(-3).map((item) => (
+                                                        <details key={item.date} className="rounded-lg border border-[var(--border-soft)] bg-[var(--panel)] px-3 py-2">
+                                                            <summary className="cursor-pointer text-xs font-semibold text-[var(--text-main)]">{item.date}</summary>
+                                                            <pre className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--text-main)]/80">{item.summary}</pre>
+                                                        </details>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        {summaryBreakdown?.perUser?.length ? (
+                                            <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] p-3">
+                                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Per User Summaries</p>
+                                                <div className="mt-2 space-y-2">
+                                                    {summaryBreakdown.perUser.slice(0, 4).map((item) => (
+                                                        <details key={item.sender} className="rounded-lg border border-[var(--border-soft)] bg-[var(--panel)] px-3 py-2">
+                                                            <summary className="cursor-pointer text-xs font-semibold text-[var(--text-main)]">{item.sender}</summary>
+                                                            <pre className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--text-main)]/80">{item.summary}</pre>
+                                                        </details>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : null}
                                     </CardContent>
                                 </Card>
                             ) : null}
@@ -2898,6 +3770,9 @@ function App() {
                                         users={users}
                                         currentUser={currentUser}
                                         onCurrentUserChange={(nextUser) => dispatch(setCurrentUser(nextUser))}
+                                        username={authProfile?.username || currentUser}
+                                        onUsernameUpdate={handleUsernameUpdate}
+                                        isUpdatingUsername={isUpdatingUsername}
                                         onAvatarUpload={handleAvatarUpload}
                                         onBackgroundUpload={handleBackgroundUpload}
                                         selectedBackgroundId={selectedBackgroundId}

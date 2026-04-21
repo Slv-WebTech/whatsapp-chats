@@ -1,11 +1,9 @@
 import { motion } from 'framer-motion';
 import { CalendarRange, Gauge } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { safeParseDateParts, getValidZoomLevel, getValidSpeed, getSafeLocalStorage, setSafeLocalStorage, clampNumber, isMobileViewport } from '../utils/validators';
+import { safeParseDateParts, getValidZoomLevel, getValidSpeed, clampNumber, isMobileViewport } from '../utils/validators';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const TIMELINE_ZOOM_STORAGE_KEY = 'whatsapp-timeline-zoom';
-const TIMELINE_YEAR_CHIPS_STORAGE_KEY = 'whatsapp-timeline-year-chips';
 
 // Safely extract and validate date parts
 function extractDateParts(dateText) {
@@ -85,14 +83,8 @@ function ReplayControls({
 
     const [isScrubbing, setIsScrubbing] = useState(false);
     const [localValue, setLocalValue] = useState(() => clampNumber(scrubValue, 0, sliderMax));
-    const [zoomLevel, setZoomLevel] = useState(() => {
-        const saved = getSafeLocalStorage(TIMELINE_ZOOM_STORAGE_KEY, 'auto');
-        return getValidZoomLevel(saved, 'auto');
-    });
-    const [yearChipsOnly, setYearChipsOnly] = useState(() => {
-        const saved = getSafeLocalStorage(TIMELINE_YEAR_CHIPS_STORAGE_KEY, 'false');
-        return saved === 'true';
-    });
+    const [zoomLevel, setZoomLevel] = useState(() => getValidZoomLevel('auto', 'auto'));
+    const [yearChipsOnly, setYearChipsOnly] = useState(false);
     const [isMobileView, setIsMobileView] = useState(() => isMobileViewport(window?.innerWidth));
     const timelineRef = useRef(null);
     const [timelineWidth, setTimelineWidth] = useState(0);
@@ -166,14 +158,6 @@ function ReplayControls({
             console.warn('Timeline width setup error:', error);
         }
     }, []);
-
-    useEffect(() => {
-        setSafeLocalStorage(TIMELINE_ZOOM_STORAGE_KEY, zoomLevel);
-    }, [zoomLevel]);
-
-    useEffect(() => {
-        setSafeLocalStorage(TIMELINE_YEAR_CHIPS_STORAGE_KEY, String(yearChipsOnly));
-    }, [yearChipsOnly]);
 
     useEffect(() => {
         const onResize = () => {

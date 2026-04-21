@@ -2,7 +2,7 @@
 
 ## 🤖 AI Features Overview
 
-ConvoLens includes **AI-powered conversation summarization** with intelligent fallback mechanisms.
+Lensiq includes **AI-powered conversation summarization** with intelligent fallback mechanisms.
 
 ---
 

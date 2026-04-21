@@ -1,109 +1,120 @@
 import { createLocalSummary } from './localSummary';
 
-function toChatTranscript(messages) {
+const DEFAULT_PROVIDER_ORDER = ['openai', 'gemini', 'ollama', 'local'];
+
+function toChatTranscript(messages, maxMessages = 180) {
     return messages
-        .slice(-150)
+        .slice(-maxMessages)
         .map((m) => `${m.date} ${m.time} - ${m.sender || 'System'}: ${m.message}`)
         .join('\n');
 }
 
-async function summarizeWithOpenAI(lastMessages, apiKey) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            temperature: 0.2,
-            messages: [
-                {
-                    role: 'system',
-                    content:
-                        'You summarize WhatsApp chats. Provide: key topics, user activity, sentiment, and action points in concise bullet points.'
-                },
-                {
-                    role: 'user',
-                    content: `Summarize this WhatsApp chat:\n\n${lastMessages}`
-                }
-            ]
-        })
-    });
-
-    if (!response.ok) {
+function truncateForModelInput(text, maxChars = 9000) {
+    const normalized = String(text || '').trim();
+    if (!normalized) {
         return '';
     }
 
-    const data = await response.json();
-    return data?.choices?.[0]?.message?.content?.trim() || '';
+    if (normalized.length <= maxChars) {
+        return normalized;
+    }
+
+    return `${normalized.slice(-maxChars)}\n\n[Transcript truncated to fit model context]`;
 }
 
-async function summarizeWithOllama(lastMessages) {
-    const ollamaBaseUrl = (import.meta.env.VITE_OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
-    const ollamaModel = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2:3b';
+function getProviderOrder() {
+    const configured = String(import.meta.env.VITE_AI_PROVIDER_ORDER || '')
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+
+    if (!configured.length) {
+        return DEFAULT_PROVIDER_ORDER;
+    }
+
+    const uniqueConfigured = Array.from(new Set(configured));
+    const withFallbacks = DEFAULT_PROVIDER_ORDER.filter((provider) => !uniqueConfigured.includes(provider));
+    return [...uniqueConfigured, ...withFallbacks];
+}
+
+export function getConfiguredAiProviders() {
+    const gatewayEnabled = import.meta.env.DEV ? true : String(import.meta.env.VITE_AI_GATEWAY_ENABLED || 'true').toLowerCase() !== 'false';
+
+    return {
+        hasOpenAI: gatewayEnabled,
+        hasGemini: gatewayEnabled,
+        hasHuggingFace: gatewayEnabled,
+        hasCloudProvider: gatewayEnabled,
+        order: getProviderOrder()
+    };
+}
+
+function normalizeAiText(text) {
+    return String(text || '')
+        .replace(/```(?:markdown|md|text)?/gi, '')
+        .trim();
+}
+
+async function summarizeWithGateway(lastMessages) {
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 24000);
 
     try {
-        const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
+        const response = await fetch('/api/ai', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
+            signal: controller.signal,
             body: JSON.stringify({
-                model: ollamaModel,
-                stream: false,
-                messages: [
-                    {
-                        role: 'system',
-                        content:
-                            'You summarize WhatsApp chats. Provide: key topics, user activity, sentiment, and action points in concise bullet points.'
-                    },
-                    {
-                        role: 'user',
-                        content: `Summarize this WhatsApp chat:\n\n${lastMessages}`
-                    }
-                ]
-            }),
-            signal: controller.signal
+                task: 'summarize',
+                payload: {
+                    mode: 'all',
+                    transcript: lastMessages
+                }
+            })
         });
 
         if (!response.ok) {
-            return '';
+            return { summary: '', provider: '' };
         }
 
         const data = await response.json();
-        return data?.message?.content?.trim() || '';
+        return {
+            summary: normalizeAiText(data?.result?.summary),
+            provider: String(data?.provider || '').trim().toLowerCase()
+        };
+    } catch {
+        return { summary: '', provider: '' };
     } finally {
         window.clearTimeout(timeoutId);
     }
 }
 
-export async function summarizeMessagesWithAI(messages) {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY?.trim();
+export async function summarizeMessagesWithAI(messages, options = {}) {
+    const includeMeta = Boolean(options?.includeMeta);
 
     if (!messages || messages.length === 0) {
-        return 'No messages available for summary.';
+        const fallback = 'No messages available for summary.';
+        return includeMeta ? { summary: fallback, provider: 'empty' } : fallback;
     }
 
-    const lastMessages = toChatTranscript(messages);
+    const lastMessages = truncateForModelInput(toChatTranscript(messages), 9600);
 
     try {
-        if (apiKey) {
-            const openAISummary = await summarizeWithOpenAI(lastMessages, apiKey);
-            if (openAISummary) {
-                return openAISummary;
-            }
+        const result = await summarizeWithGateway(lastMessages);
+        if (result.summary) {
+            return includeMeta
+                ? {
+                    summary: result.summary,
+                    provider: result.provider || 'gateway'
+                }
+                : result.summary;
         }
-
-        const ollamaSummary = await summarizeWithOllama(lastMessages);
-        if (ollamaSummary) {
-            return ollamaSummary;
-        }
-
-        return createLocalSummary(messages);
-    } catch (error) {
-        return createLocalSummary(messages);
+    } catch {
+        // Fallback below
     }
+
+    const fallback = createLocalSummary(messages);
+    return includeMeta ? { summary: fallback, provider: 'local' } : fallback;
 }

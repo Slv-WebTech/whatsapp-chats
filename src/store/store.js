@@ -1,10 +1,12 @@
 import CryptoJS from 'crypto-js';
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
 import { createTransform, FLUSH, PAUSE, PERSIST, persistReducer, persistStore, PURGE, REGISTER, REHYDRATE } from 'redux-persist';
-import storage from 'redux-persist/lib/storage';
+import authReducer from './authSlice';
 import appSessionReducer from './appSessionSlice';
+import { BRAND_PERSIST_FALLBACK } from '../config/brandTokens';
+import indexedDbStorage from './indexedDbStorage';
 
-const persistSecret = import.meta.env.VITE_REDUX_PERSIST_SECRET || 'convolens-persist';
+const persistSecret = import.meta.env.VITE_REDUX_PERSIST_SECRET || BRAND_PERSIST_FALLBACK;
 let shouldPurgePersistedState = false;
 
 const isValidSessionState = (session) => {
@@ -77,12 +79,13 @@ const encryptedSessionTransform = createTransform(
 const persistConfig = {
     key: 'root',
     version: 1,
-    storage,
-    whitelist: ['session'],
+    storage: indexedDbStorage,
+    whitelist: ['session', 'auth'],
     transforms: [encryptedSessionTransform]
 };
 
 const rootReducer = combineReducers({
+    auth: authReducer,
     session: appSessionReducer
 });
 

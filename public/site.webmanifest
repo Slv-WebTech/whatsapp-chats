@@ -1,12 +1,12 @@
 {
-  "name": "ConvoLens",
-  "short_name": "ConvoLens",
-  "description": "See Conversations Differently. Encrypted real-time private chat.",
+  "name": "Lensiq",
+  "short_name": "Lensiq",
+  "description": "See Conversations Smarter. Encrypted real-time private chat.",
   "start_url": "./",
   "scope": "./",
   "icons": [
-    { "src": "./android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "./android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "./lensiq-logo-icons-light.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./lensiq-logo-light.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "theme_color": "#1f8f63",
   "background_color": "#0f172a",

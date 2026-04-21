@@ -3,11 +3,14 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
+import { BRAND } from '../config/branding';
 
 const PROFESSIONAL_WALLPAPER = 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?fm=jpg&q=80&w=2000&auto=format&fit=crop';
 const PERSONAL_WALLPAPER = 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?fm=jpg&q=80&w=2000&auto=format&fit=crop';
+const BRAND_LOGO_DARK = `${import.meta.env.BASE_URL}lensiq-logo-dark.png`;
+const BRAND_LOGO_LIGHT = `${import.meta.env.BASE_URL}lensiq-logo-light.png`;
 
-function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, chatMode = 'romantic', onChatModeChange }) {
+function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, chatMode = 'romantic', onChatModeChange, onBackToHome }) {
     const [displayName, setDisplayName] = useState('');
     const [roomSecret, setRoomSecret] = useState('');
     const [localError, setLocalError] = useState('');
@@ -85,9 +88,14 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 shadow-[0_8px_22px_rgba(16,185,129,0.22)]">
                                     <ShieldCheck size={18} />
                                 </span>
+                                <img
+                                    src={isDark ? BRAND_LOGO_DARK : BRAND_LOGO_LIGHT}
+                                    alt={BRAND.name}
+                                    className="h-10 w-10 rounded-xl object-contain"
+                                />
                                 <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">ConvoLens</p>
-                                    <h1 className="text-lg font-semibold text-[var(--text-main)]">See Conversations Differently.</h1>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">{BRAND.name}</p>
+                                    <h1 className="text-lg font-semibold text-[var(--text-main)]">{BRAND.tagline}</h1>
                                 </div>
                             </div>
 
@@ -176,6 +184,12 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                             <Lock size={15} />
                             Unlock Chat
                         </Button>
+
+                        {onBackToHome ? (
+                            <Button type="button" variant="ghost" className="mt-2 h-10 w-full rounded-xl" onClick={onBackToHome}>
+                                Back to Home
+                            </Button>
+                        ) : null}
                     </CardContent>
                 </Card>
             </motion.form>

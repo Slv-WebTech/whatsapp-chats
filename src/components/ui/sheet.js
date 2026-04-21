@@ -28,7 +28,7 @@ function SheetOverlay({ className, ...props }) {
 }
 
 function SheetContent({ side = 'right', className, children, ...props }) {
-    const sideClass = side === 'right' ? 'right-0 top-0 h-full w-full max-w-[430px]' : 'left-0 top-0 h-full w-full max-w-[430px]';
+    const sideClass = side === 'right' ? 'right-0 top-0 h-[100dvh] w-full max-w-[430px]' : 'left-0 top-0 h-[100dvh] w-full max-w-[430px]';
 
     return (
         <SheetPortal>
