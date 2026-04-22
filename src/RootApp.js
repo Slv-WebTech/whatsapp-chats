@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import AuthForms from './components/AuthForms';
 import { useSimpleRouter } from './hooks/useSimpleRouter';
-import AdminPage from './pages/Admin';
-import ChatPage from './pages/Chat';
-import Home from './pages/Home';
-import ImportedChatPage from './pages/ImportedChat';
-import ProfilePage from './pages/Profile';
+const AdminPage = lazy(() => import('./pages/Admin'));
+const ChatPage = lazy(() => import('./pages/Chat'));
+const Home = lazy(() => import('./pages/Home'));
+const ImportedChatPage = lazy(() => import('./pages/ImportedChat'));
+const ProfilePage = lazy(() => import('./pages/Profile'));
 import { getActiveChatRouteId, setActiveChatRouteId } from './utils/chatRouteState';
 import {
     logoutUser,
@@ -101,6 +101,12 @@ export default function RootApp() {
         route.navigate('/', { replace: true });
     };
 
+    const loadingFallback = (
+        <div className="grid min-h-[100svh] place-items-center bg-[var(--page-bg)] text-[var(--text-main)]">
+            <div className="rounded-[1.4rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] px-5 py-4 text-sm">Loading page...</div>
+        </div>
+    );
+
     if (!authInitialized) {
         return (
             <div className="grid min-h-[100svh] place-items-center bg-[var(--page-bg)] text-[var(--text-main)]">
@@ -110,24 +116,24 @@ export default function RootApp() {
     }
 
     if (route.path === '/admin') {
-        return <AdminPage navigate={route.navigate} />;
+        return <Suspense fallback={loadingFallback}><AdminPage navigate={route.navigate} /></Suspense>;
     }
 
     if (route.path === '/chat') {
-        return <ChatPage chatId={getActiveChatRouteId()} navigate={route.navigate} onLogout={handleLogout} />;
+        return <Suspense fallback={loadingFallback}><ChatPage chatId={getActiveChatRouteId()} navigate={route.navigate} onLogout={handleLogout} /></Suspense>;
     }
 
     if (route.path.startsWith('/imported/')) {
         const importedId = decodeURIComponent(route.path.replace('/imported/', '') || '');
-        return <ImportedChatPage importedId={importedId} navigate={route.navigate} onLogout={handleLogout} />;
+        return <Suspense fallback={loadingFallback}><ImportedChatPage importedId={importedId} navigate={route.navigate} onLogout={handleLogout} /></Suspense>;
     }
 
     if (route.path === '/home') {
-        return <Home navigate={route.navigate} onLogout={handleLogout} />;
+        return <Suspense fallback={loadingFallback}><Home navigate={route.navigate} onLogout={handleLogout} /></Suspense>;
     }
 
     if (route.path === '/profile') {
-        return <ProfilePage navigate={route.navigate} onLogout={handleLogout} />;
+        return <Suspense fallback={loadingFallback}><ProfilePage navigate={route.navigate} onLogout={handleLogout} /></Suspense>;
     }
 
     return <AuthForms onAuthenticated={() => route.navigate('/home')} />;

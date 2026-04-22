@@ -1,4 +1,5 @@
 import {
+    arrayRemove,
     arrayUnion,
     doc,
     documentId,
@@ -122,6 +123,23 @@ function chatDoc(chatId) {
 
 function adminStatsDoc() {
     return doc(db, 'admin_stats', 'global');
+}
+
+function getResolvedChatType(chatId) {
+    const safeChatId = String(chatId || '').trim();
+    if (!safeChatId) {
+        return 'room';
+    }
+
+    if (safeChatId.includes('_')) {
+        return '1:1';
+    }
+
+    if (safeChatId.startsWith('shared-')) {
+        return 'shared';
+    }
+
+    return 'room';
 }
 
 export function getDirectChatId(uidA, uidB) {
@@ -273,7 +291,7 @@ export function subscribeUserChats(userId, callback, onError) {
     const safeUserId = String(userId || '').trim();
     if (!safeUserId) {
         callback([]);
-        return () => {};
+        return () => { };
     }
 
     let fallbackUnsubscribe = null;
@@ -327,12 +345,12 @@ export async function fetchChatsByIds(chatIds) {
     // Fetch each chat doc individually so one unauthorized/stale chat id does not fail the entire list.
     const settled = await Promise.allSettled(safeIds.map((id) => getDoc(chatDoc(id))));
 
-    return settled
-        .flatMap((result, index) => {
+    const chats = await Promise.all(
+        settled.map(async (result, index) => {
             if (result.status !== 'fulfilled') {
                 const code = String(result.reason?.code || '').toLowerCase();
                 if (code.includes('permission-denied') || code.includes('not-found')) {
-                    return [];
+                    return null;
                 }
 
                 throw result.reason;
@@ -340,11 +358,45 @@ export async function fetchChatsByIds(chatIds) {
 
             const snapshot = result.value;
             if (!snapshot.exists()) {
-                return [];
+                return null;
             }
 
-            return [toSerializable({ id: safeIds[index], ...snapshot.data() })];
+            const chatId = safeIds[index];
+            const data = snapshot.data() || {};
+            let resolvedPreview =
+                String(data.previewText || '').trim() ||
+                String(data.lastMessageText || '').trim() ||
+                String(data.lastMessagePreview || '').trim() ||
+                String(data.latestMessageText || '').trim() ||
+                String(data.lastMessage?.text || '').trim();
+            let resolvedLastMessageAt = data.lastMessageAt || null;
+
+            if (!resolvedPreview) {
+                try {
+                    const latestMessageSnapshot = await getDocs(
+                        query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'desc'), limit(1))
+                    );
+                    const latestMessage = latestMessageSnapshot.docs[0]?.data() || null;
+                    resolvedPreview = String(latestMessage?.text || '').trim();
+                    if (!resolvedLastMessageAt && latestMessage?.createdAt) {
+                        resolvedLastMessageAt = latestMessage.createdAt;
+                    }
+                } catch {
+                    // Ignore preview fallback failures so chat list remains usable.
+                }
+            }
+
+            return toSerializable({
+                id: chatId,
+                ...data,
+                lastMessageText: resolvedPreview || String(data.lastMessageText || '').trim(),
+                lastMessageAt: resolvedLastMessageAt || data.lastMessageAt || null
+            });
         })
+    );
+
+    return chats
+        .filter(Boolean)
         .sort((a, b) => {
             const aTime = Number(a.lastMessageAt || a.updatedAt || a.createdAt || 0);
             const bTime = Number(b.lastMessageAt || b.updatedAt || b.createdAt || 0);
@@ -408,7 +460,7 @@ export async function createOrGetDirectChat(currentProfile, targetProfile) {
     );
     batch.set(userChatsDoc(currentProfile.uid), { chatIds: arrayUnion(chatId), updatedAt: serverTimestamp() }, { merge: true });
     await batch.commit();
-    await touchAdminStats({ uid: currentProfile.uid, chatId });
+    await touchAdminStats({ uid: currentProfile.uid, chatId, chatType: '1:1' });
     return chatId;
 }
 
@@ -426,6 +478,7 @@ export async function joinGroupChatBySecret(currentProfile, secret) {
         {
             type: 'group',
             name: `Group ${chatId.slice(0, 8).toUpperCase()}`,
+            createdBy: currentProfile.uid,
             members: arrayUnion(currentProfile.uid),
             memberUsernames: {
                 [currentProfile.uid]: currentProfile.username
@@ -444,7 +497,7 @@ export async function joinGroupChatBySecret(currentProfile, secret) {
     );
     batch.set(userChatsDoc(currentProfile.uid), { chatIds: arrayUnion(chatId), updatedAt: serverTimestamp() }, { merge: true });
     await batch.commit();
-    await touchAdminStats({ uid: currentProfile.uid, chatId });
+    await touchAdminStats({ uid: currentProfile.uid, chatId, chatType: 'group' });
 
     return {
         chatId,
@@ -499,11 +552,46 @@ export function subscribeAllUsers(callback, onError) {
 export function subscribeGroupChats(callback, onError) {
     ensureFirebase();
     return onSnapshot(query(chatsRef(), where('type', '==', 'group')), (snapshot) => {
-        callback(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })));
+        const mappedGroups = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+        const staleGroups = [];
+        const actualGroups = mappedGroups.filter((entry) => {
+            const safeId = String(entry?.id || '').trim();
+            const hasCreator = Boolean(String(entry?.createdBy || '').trim());
+            const looksLikeHashedGroupId = /^[a-f0-9]{64}$/i.test(safeId);
+            const isActualGroup = hasCreator || looksLikeHashedGroupId;
+
+            if (!isActualGroup) {
+                staleGroups.push(safeId);
+            }
+
+            return isActualGroup;
+        });
+
+        callback(actualGroups);
+
+        if (staleGroups.length) {
+            Promise.allSettled(
+                staleGroups.map((chatId) =>
+                    updateDoc(chatDoc(chatId), {
+                        type: getResolvedChatType(chatId),
+                        updatedAt: serverTimestamp()
+                    })
+                )
+            ).catch(() => {
+                // Ignore stale chat cleanup failures; admin view already hides them.
+            });
+
+            updateDoc(adminStatsDoc(), {
+                activeGroups: arrayRemove(...staleGroups),
+                updatedAt: serverTimestamp()
+            }).catch(() => {
+                // Ignore stale stats cleanup failures.
+            });
+        }
     }, onError);
 }
 
-export async function touchAdminStats({ uid, chatId } = {}) {
+export async function touchAdminStats({ uid, chatId, chatType } = {}) {
     ensureFirebase();
 
     await runTransaction(db, async (transaction) => {
@@ -513,7 +601,7 @@ export async function touchAdminStats({ uid, chatId } = {}) {
         const activeUsers24h = Array.isArray(stats.activeUsers24h) ? stats.activeUsers24h : [];
         const activeGroups = Array.isArray(stats.activeGroups) ? stats.activeGroups : [];
         const nextUsers = uid ? Array.from(new Set([...activeUsers24h, uid])).slice(-500) : activeUsers24h;
-        const nextGroups = chatId ? Array.from(new Set([...activeGroups, chatId])).slice(-500) : activeGroups;
+        const nextGroups = chatId && chatType === 'group' ? Array.from(new Set([...activeGroups, chatId])).slice(-500) : activeGroups;
         const totalUsersSnapshot = await getDocs(query(usersRef(), limit(1000)));
         const totalChatsSnapshot = await getDocs(query(chatsRef(), limit(1000)));
 

@@ -464,6 +464,97 @@ select {
     scroll-snap-align: start;
 }
 
+@media (max-width: 360px) {
+    .live-composer-shell {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        padding-top: 0.375rem;
+        padding-bottom: calc(0.35rem + env(safe-area-inset-bottom));
+    }
+
+    .live-composer-rail {
+        gap: 0.3rem;
+        margin-bottom: 0.35rem;
+        padding-bottom: 0.25rem;
+    }
+
+    .live-composer-hint {
+        min-height: 0;
+        margin-bottom: 0.2rem;
+        padding-left: 0;
+    }
+
+    .live-composer-card {
+        padding: 0.4rem;
+    }
+
+    .live-composer-input-row {
+        gap: 0.35rem;
+    }
+
+    .live-composer-textarea {
+        min-height: 2.65rem;
+        padding: 0.6rem 0.75rem;
+    }
+
+    .live-composer-send-btn {
+        width: 2.85rem;
+        height: 2.85rem;
+    }
+}
+
+@media (max-width: 320px) {
+    .live-composer-shell {
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
+        padding-bottom: calc(0.3rem + env(safe-area-inset-bottom));
+    }
+
+    .live-composer-rail {
+        gap: 0.22rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .live-composer-rail .composer-action-rail__item {
+        width: 1.8rem;
+        height: 1.8rem;
+        border-radius: 0.6rem;
+    }
+
+    .live-composer-rail .composer-action-rail__item svg {
+        width: 0.68rem;
+        height: 0.68rem;
+    }
+
+    .live-composer-card {
+        padding: 0.34rem;
+    }
+
+    .live-composer-input-row {
+        gap: 0.28rem;
+    }
+
+    .live-composer-emoji-btn {
+        width: 2.05rem;
+        height: 2.05rem;
+    }
+
+    .live-composer-emoji-btn svg {
+        width: 0.8rem;
+        height: 0.8rem;
+    }
+
+    .live-composer-textarea {
+        min-height: 2.5rem;
+        padding: 0.52rem 0.65rem;
+    }
+
+    .live-composer-send-btn {
+        width: 2.7rem;
+        height: 2.7rem;
+    }
+}
+
 [data-theme='dark'] .header-menu-item {
     color: rgba(226, 232, 240, 0.96);
 }
@@ -963,6 +1054,48 @@ select {
         padding-right: 0.35rem !important;
         padding-top: 0.45rem !important;
         padding-bottom: 3rem !important;
+    }
+
+    .premium-message-bubble {
+        max-width: 88vw;
+        padding-top: 0.85rem !important;
+        padding-bottom: 0.5rem !important;
+    }
+
+    .chat-bubble-action-trigger {
+        top: 0.28rem !important;
+        height: 1rem !important;
+        width: 1rem !important;
+    }
+
+    .chat-bubble-action-trigger svg {
+        width: 0.62rem !important;
+        height: 0.62rem !important;
+    }
+
+    .chat-bubble-sender {
+        max-width: calc(100% - 1.7rem) !important;
+        padding-right: 0.3rem !important;
+    }
+}
+
+@media (max-width: 320px) {
+    .premium-message-bubble {
+        max-width: 86vw;
+        padding-left: 0.62rem !important;
+        padding-right: 0.62rem !important;
+        padding-top: 0.78rem !important;
+    }
+
+    .chat-bubble-action-trigger {
+        top: 0.24rem !important;
+        height: 0.95rem !important;
+        width: 0.95rem !important;
+    }
+
+    .chat-bubble-sender {
+        max-width: calc(100% - 1.85rem) !important;
+        font-size: 10px !important;
     }
 }
 

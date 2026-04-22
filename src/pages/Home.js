@@ -7,7 +7,7 @@ import SearchBar from "../components/SearchBar";
 import PremiumUsernameTag from "../components/PremiumUsernameTag";
 import { Button } from "../components/ui/button";
 import Layout from "./Layout";
-import { createOrGetDirectChat, fetchChatsByIds, getDirectChatSecret, joinGroupChatBySecret, searchUsersByUsername, subscribeUserChats } from "../firebase/socialService";
+import { createOrGetDirectChat, fetchChatsByIds, getDirectChatSecret, joinGroupChatBySecret, searchUsersByUsername, subscribeChat, subscribeUserChats } from "../firebase/socialService";
 import { parseWhatsAppFileInChunks } from "../utils/parser";
 import { listImportedChats, saveImportedChat } from "../utils/importedChatStore";
 import { selectAuthProfile, selectAuthUser, selectIsAdmin } from "../store/authSlice";
@@ -55,13 +55,21 @@ function getConversationSortTime(chat) {
 }
 
 function buildLastMessagePreview(chat) {
-  const raw = String(chat?.lastMessageText || '').trim();
+  const raw = String(
+    chat?.previewText ||
+    chat?.lastMessageText ||
+    chat?.lastMessagePreview ||
+    chat?.latestMessageText ||
+    chat?.lastMessage?.text ||
+    ''
+  ).trim();
+
   if (!raw) {
     return 'No messages yet';
   }
 
   if (raw.startsWith('U2FsdGVkX1')) {
-    if (chat?.type === '1:1') {
+    if (chat?.type !== 'group' && chat?.id) {
       try {
         return decryptMessage(raw, getDirectChatSecret(chat.id));
       } catch {
@@ -98,20 +106,82 @@ export default function Home({ navigate, onLogout }) {
       return undefined;
     }
 
-    return subscribeUserChats(
+    let cancelled = false;
+    let liveChatUnsubscribers = [];
+
+    const clearLiveSubscriptions = () => {
+      liveChatUnsubscribers.forEach((unsubscribe) => unsubscribe?.());
+      liveChatUnsubscribers = [];
+    };
+
+    const hydrateChatList = async (nextChatIds) => {
+      const safeChatIds = Array.from(new Set((nextChatIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+      clearLiveSubscriptions();
+
+      if (!safeChatIds.length) {
+        setChats([]);
+        return;
+      }
+
+      const items = await fetchChatsByIds(safeChatIds);
+      if (cancelled) {
+        return;
+      }
+
+      setChats(items.map((chat) => ({
+        ...chat,
+        displayTitle: buildDisplayTitle(chat, authUser.uid),
+        previewText: buildLastMessagePreview(chat)
+      })));
+
+      liveChatUnsubscribers = safeChatIds.map((id) =>
+        subscribeChat(
+          id,
+          (nextChat) => {
+            if (!nextChat || cancelled) {
+              return;
+            }
+
+            const normalized = {
+              ...nextChat,
+              displayTitle: buildDisplayTitle(nextChat, authUser.uid),
+              previewText: buildLastMessagePreview(nextChat)
+            };
+
+            setChats((prev) => {
+              const withoutCurrent = prev.filter((entry) => entry.id !== normalized.id);
+              return [...withoutCurrent, normalized].sort((left, right) => getConversationSortTime(right) - getConversationSortTime(left));
+            });
+          },
+          () => {
+            // Keep list stable if one chat subscription fails.
+          }
+        )
+      );
+    };
+
+    const stopUserChatList = subscribeUserChats(
       authUser.uid,
-      async (nextChatIds) => {
-        const items = await fetchChatsByIds(nextChatIds);
-        setChats(items.map((chat) => ({
-          ...chat,
-          displayTitle: buildDisplayTitle(chat, authUser.uid),
-          previewText: buildLastMessagePreview(chat)
-        })));
+      (nextChatIds) => {
+        hydrateChatList(nextChatIds).catch(() => {
+          if (!cancelled) {
+            setChats([]);
+          }
+        });
       },
       () => {
-        setError("Unable to load your chat list.");
-      },
+        if (!cancelled) {
+          setError("Unable to load your chat list.");
+          setChats([]);
+        }
+      }
     );
+
+    return () => {
+      cancelled = true;
+      stopUserChatList?.();
+      clearLiveSubscriptions();
+    };
   }, [authUser?.uid]);
 
   useEffect(() => {

@@ -30,7 +30,40 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
     if (event.data?.type === 'SKIP_WAITING') {
         self.skipWaiting();
+        return;
     }
+
+    if (event.data?.type === 'SHOW_NOTIFICATION') {
+        const payload = event.data?.payload || {};
+        const title = String(payload.title || 'New message');
+        const options = {
+            body: String(payload.body || ''),
+            icon: payload.icon,
+            badge: payload.badge,
+            tag: payload.tag,
+            renotify: Boolean(payload.renotify),
+            data: payload.data || {}
+        };
+
+        event.waitUntil(self.registration.showNotification(title, options));
+    }
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const targetUrl = String(event.notification?.data?.url || './');
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+            const existing = windowClients.find((client) => client.url.includes(self.location.origin));
+
+            if (existing) {
+                return existing.focus().then(() => existing.navigate(targetUrl));
+            }
+
+            return clients.openWindow(targetUrl);
+        })
+    );
 });
 
 self.addEventListener('fetch', (event) => {

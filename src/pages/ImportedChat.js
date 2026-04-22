@@ -160,7 +160,7 @@ export default function ImportedChatPage({ importedId, navigate, onLogout }) {
                 ))}
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2">
                 <p className="px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-200/80">Imported Chats</p>
                 {importedChats.length ? (
                     importedChats.map((chat) => (
@@ -182,7 +182,7 @@ export default function ImportedChatPage({ importedId, navigate, onLogout }) {
                 )}
             </div>
 
-            <div className="space-y-2 border-t border-[var(--border-soft)] pt-2.5">
+            <div className="fixed bottom-0 left-0 z-50 w-[75vw] max-w-[380px] border-t border-[var(--border-soft)] bg-[var(--panel-strong)] p-3 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:bg-transparent lg:border-0 lg:mt-auto lg:px-0 lg:py-3">
                 <div className="flex items-center gap-2">
                     {isAdmin ? (
                         <Button

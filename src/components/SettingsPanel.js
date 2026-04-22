@@ -186,9 +186,9 @@ function SettingsPanel({
                             onFileSelect={onBackgroundUpload}
                         />
 
-                        <div className="mt-3 flex flex-col max-h-64 overflow-hidden">
+                        <div className="mt-3">
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Background Presets</p>
-                            <div className="overflow-y-auto scroll-thin flex-1 min-h-0 pr-1">
+                            <div className="mt-1 max-h-[300px] overflow-y-auto scroll-thin pr-1">
                                 <button
                                     type="button"
                                     onClick={() => onBackgroundPresetSelect?.('')}
@@ -247,7 +247,7 @@ function SettingsPanel({
                         ) : null}
 
                         <p className="mt-3 text-xs text-[var(--text-muted)]">Upload a profile image per sender.</p>
-                        <div className="mt-2.5 space-y-2.5">
+                        <div className="mt-2.5 max-h-64 overflow-y-auto scroll-thin space-y-2.5 pr-1">
                             {users.map((user) => (
                                 <label key={user} className="block rounded-[1rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] p-2.5 text-sm">
                                     <span className="mb-2 block font-medium text-[var(--text-main)]">{user}</span>

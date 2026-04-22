@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, CalendarClock, ChevronDown, ChevronUp, Download, Lock, LogOut, MoonStar, MoreVertical, Search, Settings2, Sparkles, SunMedium, Upload, Video } from 'lucide-react';
+import { ArrowLeft, BarChart3, CalendarClock, ChevronDown, ChevronUp, Download, Lock, LogOut, Menu, MoonStar, MoreVertical, Search, Settings2, Sparkles, SunMedium, Upload, Video } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
@@ -31,6 +31,7 @@ function ChatHeader({
     aiPanelOpen,
     onToggleAiPanel,
     compact,
+    onOpenSidebar,
     onBackToHome,
     onLogout
 }) {
@@ -85,17 +86,17 @@ function ChatHeader({
             <div className="chat-header__content mx-auto flex w-full max-w-4xl flex-col gap-1.5 md:gap-2">
                 <div className="chat-header__row flex items-center justify-between gap-1.5 md:gap-2">
                     <div className="min-w-0 flex items-center gap-2">
-                        {onBackToHome ? (
+                        {onOpenSidebar ? (
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
                                 className="header-icon-button h-9 w-9 md:hidden"
-                                aria-label="Back to home"
-                                title="Back to home"
-                                onClick={() => onBackToHome?.()}
+                                aria-label="Open chat sidebar"
+                                title="Open chat sidebar"
+                                onClick={() => onOpenSidebar?.()}
                             >
-                                <ArrowLeft size={16} />
+                                <Menu size={16} />
                             </Button>
                         ) : null}
                         <div className="relative">

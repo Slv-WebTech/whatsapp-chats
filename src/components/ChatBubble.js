@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import { getHighlightParts } from '../utils/highlight';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, CheckCheck, Download, FileText, Info, Mic, Phone, Play, Video } from 'lucide-react';
+import { Check, CheckCheck, ChevronDown, FileText, Info, Mic, Phone, Play, Video } from 'lucide-react';
 import { clsx } from 'clsx';
 import { classifyMessage, getCallDetails, getMediaLabel, getResolvableMediaSource, getVoiceDuration } from '../utils/messageTypes';
 
@@ -53,12 +54,12 @@ function MediaBubble({ message, reduceMotion }) {
     if (mediaSource) {
         return (
             <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} whileTap={reduceMotion ? undefined : { scale: 0.99 }}>
-                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/65 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700/70 dark:bg-slate-900/45">
+                <div className="w-[70vw] max-w-[280px] overflow-hidden rounded-2xl border border-slate-200/80 bg-white/65 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700/70 dark:bg-slate-900/45 sm:max-w-[320px]">
                     <img
                         src={mediaSource}
                         alt="Media preview"
                         loading="lazy"
-                        className="h-32 w-full object-cover"
+                        className="h-auto max-h-72 w-full object-cover"
                         onError={(event) => {
                             event.currentTarget.style.display = 'none';
                         }}
@@ -81,14 +82,14 @@ function MediaBubble({ message, reduceMotion }) {
 
     return (
         <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} whileTap={reduceMotion ? undefined : { scale: 0.99 }}>
-            <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700/70 dark:bg-slate-900/45">
+            <div className="w-[70vw] max-w-[280px] rounded-2xl border border-slate-200/80 bg-white/70 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700/70 dark:bg-slate-900/45 sm:max-w-[320px]">
                 <div className="flex items-center gap-3">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[var(--text-main)] dark:bg-slate-800/80">
                         <FileText size={18} />
                     </span>
                     <div>
                         <p className="text-sm font-semibold text-[var(--text-main)]">{getMediaLabel(message)}</p>
-                        <p className="text-xs text-[var(--text-muted)]">Tap to preview attachment style</p>
+                        <p className="text-xs text-[var(--text-muted)]">Tap to preview media</p>
                     </div>
                 </div>
             </div>
@@ -118,59 +119,44 @@ function CallBubble({ message, reduceMotion }) {
     );
 }
 
-function FileBubble({ message, reduceMotion }) {
-    const attachment = message.attachment;
-    
-    if (!attachment || !attachment.url) {
-        return null;
-    }
-
-    const getFileIcon = () => {
-        const type = attachment.type || '';
-        if (type.startsWith('image/')) return '🖼️';
-        if (type.startsWith('video/')) return '🎬';
-        if (type.startsWith('audio/')) return '🎵';
-        if (type.includes('pdf')) return '📄';
-        if (type.includes('word') || type.includes('document')) return '📝';
-        if (type.includes('sheet') || type.includes('excel')) return '📊';
-        if (type.includes('zip') || type.includes('compressed')) return '📦';
-        return '📎';
-    };
-
-    const formatFileSize = (bytes) => {
-        if (!bytes) return '';
-        if (bytes < 1024) return `${bytes}B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-    };
-
-    return (
-        <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} whileTap={reduceMotion ? undefined : { scale: 0.99 }}>
-            <div className="rounded-2xl border border-emerald-300/40 bg-emerald-500/12 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-700/50 dark:bg-emerald-500/10">
-                <div className="flex items-center gap-3">
-                    <span className="text-xl">{getFileIcon()}</span>
-                    <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-[var(--text-main)]">{attachment.name}</p>
-                        <p className="text-xs text-[var(--text-muted)]">{formatFileSize(attachment.size)}</p>
-                    </div>
-                    <a
-                        href={attachment.url}
-                        download={attachment.name}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-600 transition-all hover:bg-emerald-500/30 dark:bg-emerald-500/30 dark:text-emerald-200"
-                        aria-label={`Download ${attachment.name}`}
-                    >
-                        <Download size={16} />
-                    </a>
-                </div>
-            </div>
-        </motion.div>
-    );
-}
-
-function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef, onReplayFrom, onAddReaction, onReply, onOpenMessageActions, animateEntry }) {
+function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef, onAddReaction, onReply, onCopy, onForward, onDelete, animateEntry }) {
     const reduceMotion = useReducedMotion();
+    const longPressTimerRef = useRef(null);
+    const bubbleContainerRef = useRef(null);
+    const [menuOpen, setMenuOpen] = useState(false);
     const messageType = classifyMessage(message);
     const reactionEntries = Object.entries(message.reactions || {}).filter(([, count]) => Number(count) > 0);
+    const normalizedText = String(message?.message || '').trim();
+    const shouldRenderText = messageType === 'text' && normalizedText.length > 0;
+    const canDeleteForEveryone = Boolean(isCurrentUser && message?.firestoreId);
+
+    useEffect(() => {
+        if (!menuOpen) {
+            return;
+        }
+
+        const handleOutside = (event) => {
+            if (!bubbleContainerRef.current?.contains(event.target)) {
+                setMenuOpen(false);
+            }
+        };
+
+        const handleEscape = (event) => {
+            if (event.key === 'Escape') {
+                setMenuOpen(false);
+            }
+        };
+
+        window.addEventListener('mousedown', handleOutside);
+        window.addEventListener('touchstart', handleOutside, { passive: true });
+        window.addEventListener('keydown', handleEscape);
+
+        return () => {
+            window.removeEventListener('mousedown', handleOutside);
+            window.removeEventListener('touchstart', handleOutside);
+            window.removeEventListener('keydown', handleEscape);
+        };
+    }, [menuOpen]);
 
     if (message.isSystem) {
         return (
@@ -236,50 +222,126 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                 !isCurrentUser && <div className="mr-2 w-7 md:w-8" />
             )}
 
-            <motion.button
-                whileHover={reduceMotion ? undefined : { scale: 1.02, y: -1 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.985, y: 0 }}
-                type="button"
-                onClick={onReplayFrom}
-                onDoubleClick={() => onAddReaction?.(message, '👍')}
-                className={clsx(
-                    `premium-message-bubble relative max-w-[90%] border px-3 py-2 text-left shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md sm:max-w-[82%] md:max-w-[68%] md:px-3.5 md:py-2.5 ${bubbleColor} ${baseRadius} ${radiusClass} ${tailClass}`,
-                    isCurrentUser ? 'text-slate-900' : 'text-[var(--text-main)]',
-                    isMatch && 'ring-2 ring-yellow-300/80'
-                )}
-            >
-                {!isCurrentUser && !message.isGrouped ? (
-                    <p className="mb-1 text-[11px] font-semibold tracking-[0.01em] text-[var(--accent)]">{message.sender}</p>
-                ) : null}
+            {/* Outer wrapper owns relative positioning for dropdown menu */}
+            <div ref={bubbleContainerRef} className="relative">
 
-                <AnimatePresence mode="wait">
-                    {messageType === 'voice' ? <VoiceBubble key="voice" message={message} reduceMotion={reduceMotion} /> : null}
-                    {messageType === 'media' ? <MediaBubble key="media" message={message} reduceMotion={reduceMotion} /> : null}
-                    {message.attachment && message.attachment.url ? <FileBubble key="file" message={message} reduceMotion={reduceMotion} /> : null}
-                    {messageType === 'text' ? <MessageHighlight key="text" message={message.message} query={query} reduceMotion={reduceMotion} /> : null}
+                {/* Dropdown menu — rendered as sibling to the bubble, above it, never clipped by bubble */}
+                <AnimatePresence>
+                    {menuOpen ? (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.93, y: 4 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.93, y: 4 }}
+                            transition={{ duration: 0.13 }}
+                            className={clsx(
+                                'absolute bottom-full z-50 mb-1.5 min-w-[140px] rounded-xl border border-white/15 bg-[#111827]/97 p-1 text-xs text-slate-100 shadow-2xl backdrop-blur-md',
+                                isCurrentUser ? 'right-0' : 'left-0'
+                            )}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left hover:bg-white/10" onClick={() => { onReply?.(message); setMenuOpen(false); }}>
+                                Reply
+                            </button>
+                            <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left hover:bg-white/10" onClick={() => { onCopy?.(message); setMenuOpen(false); }}>
+                                Copy
+                            </button>
+                            <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left hover:bg-white/10" onClick={() => { onForward?.(message); setMenuOpen(false); }}>
+                                Forward
+                            </button>
+                            <div className="my-0.5 h-px bg-white/10" />
+                            <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left text-amber-200 hover:bg-white/10" onClick={() => { onDelete?.(message, 'me'); setMenuOpen(false); }}>
+                                Delete for me
+                            </button>
+                            {canDeleteForEveryone ? (
+                                <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left text-rose-300 hover:bg-white/10" onClick={() => { onDelete?.(message, 'everyone'); setMenuOpen(false); }}>
+                                    Delete for everyone
+                                </button>
+                            ) : null}
+                        </motion.div>
+                    ) : null}
                 </AnimatePresence>
 
-                <span
+                <motion.div
+                    whileHover={reduceMotion ? undefined : { scale: 1.02, y: -1 }}
+                    whileTap={reduceMotion ? undefined : { scale: 0.985, y: 0 }}
+                    onDoubleClick={() => onAddReaction?.(message, '👍')}
+                    onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMenuOpen(true);
+                    }}
+                    onTouchStart={() => {
+                        longPressTimerRef.current = window.setTimeout(() => {
+                            setMenuOpen(true);
+                        }, 550);
+                    }}
+                    onTouchEnd={() => {
+                        if (longPressTimerRef.current) {
+                            window.clearTimeout(longPressTimerRef.current);
+                            longPressTimerRef.current = null;
+                        }
+                    }}
+                    onTouchCancel={() => {
+                        if (longPressTimerRef.current) {
+                            window.clearTimeout(longPressTimerRef.current);
+                            longPressTimerRef.current = null;
+                        }
+                    }}
                     className={clsx(
-                        'message-time-label mt-1.5 inline-flex w-full items-center justify-end gap-1 text-right text-[11px] leading-none',
-                        isCurrentUser ? 'message-time-label--sent' : 'message-time-label--received'
+                        `premium-message-bubble relative min-w-[80px] max-w-[95%] border px-3 pb-2 pt-3 text-left shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md sm:max-w-[88%] md:max-w-[82%] lg:max-w-[75%] md:px-3.5 md:pb-2.5 md:pt-3.5 ${bubbleColor} ${baseRadius} ${radiusClass} ${tailClass}`,
+                        isCurrentUser ? 'text-slate-900' : 'text-[var(--text-main)]',
+                        isMatch && 'ring-2 ring-yellow-300/80'
                     )}
+                    style={{ paddingRight: '1.85rem' }}
                 >
-                    {message.time}
-                    {isCurrentUser ? statusIcon : null}
-                </span>
+                    {/* Chevron trigger — always top-right corner of the bubble */}
+                    <button
+                        type="button"
+                        aria-label="Message actions"
+                        title="Message actions"
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen((p) => !p); }}
+                        className="chat-bubble-action-trigger absolute top-1.5 right-1.5 z-20 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/45 text-white/90 shadow-md transition hover:bg-black/65"
+                    >
+                        <ChevronDown size={12} />
+                    </button>
+                    {!isCurrentUser && !message.isGrouped ? (
+                        <p className="chat-bubble-sender mb-1 block max-w-[calc(100%-1.5rem)] truncate pr-6 text-[11px] font-semibold tracking-[0.01em] text-[var(--accent)]">{message.sender}</p>
+                    ) : null}
 
-                {reactionEntries.length ? (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                        {reactionEntries.map(([emoji, count]) => (
-                            <span key={`${message.id}-${emoji}`} className="inline-flex items-center gap-1 rounded-full border border-white/35 bg-white/20 px-2 py-0.5 text-[11px] font-medium">
-                                <span>{emoji}</span>
-                                <span>{count}</span>
-                            </span>
-                        ))}
-                    </div>
-                ) : null}
-            </motion.button>
+                    {message.replyToText ? (
+                        <div className="mb-1.5 rounded-xl border border-white/25 bg-white/10 px-2 py-1.5 text-xs">
+                            <p className="truncate font-semibold text-[var(--accent)]">{message.replyToSender || 'Reply'}</p>
+                            <p className="truncate opacity-85">{message.replyToText}</p>
+                        </div>
+                    ) : null}
+
+                    <AnimatePresence mode="wait">
+                        {messageType === 'voice' ? <VoiceBubble key="voice" message={message} reduceMotion={reduceMotion} /> : null}
+                        {messageType === 'media' ? <MediaBubble key="media" message={message} reduceMotion={reduceMotion} /> : null}
+                        {shouldRenderText ? <MessageHighlight key="text" message={message.message} query={query} reduceMotion={reduceMotion} /> : null}
+                    </AnimatePresence>
+
+                    <span
+                        className={clsx(
+                            'message-time-label mt-1.5 inline-flex w-full items-center justify-end gap-1 text-right text-[11px] leading-none',
+                            isCurrentUser ? 'message-time-label--sent' : 'message-time-label--received'
+                        )}
+                    >
+                        {message.time}
+                        {isCurrentUser ? statusIcon : null}
+                    </span>
+
+                    {reactionEntries.length ? (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            {reactionEntries.map(([emoji, count]) => (
+                                <span key={`${message.id}-${emoji}`} className="inline-flex items-center gap-1 rounded-full border border-white/35 bg-white/20 px-2 py-0.5 text-[11px] font-medium">
+                                    <span>{emoji}</span>
+                                    <span>{count}</span>
+                                </span>
+                            ))}
+                        </div>
+                    ) : null}
+                </motion.div>
+            </div>
         </motion.div>
     );
 }

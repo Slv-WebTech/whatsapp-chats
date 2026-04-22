@@ -43,7 +43,13 @@ export default function ChatListItem({ chat, isActive, onSelect, currentUserId }
   const isLatestMessageIncoming = !lastSenderId || String(currentUserId || '').trim() !== lastSenderId;
   const unread = lastMessageAt > 0 && lastReadAt < lastMessageAt && isLatestMessageIncoming ? 1 : 0;
   const title = chat.displayTitle || chat.name || "Untitled chat";
-  const preview = chat.previewText || chat.lastMessageText || "No messages yet";
+  const preview =
+    chat.previewText ||
+    chat.lastMessageText ||
+    chat.lastMessagePreview ||
+    chat.latestMessageText ||
+    chat.lastMessage?.text ||
+    "No messages yet";
   const isImported = Boolean(chat?.isImported || chat?.type === "imported");
 
   return (
@@ -54,8 +60,8 @@ export default function ChatListItem({ chat, isActive, onSelect, currentUserId }
       onClick={onSelect}
     >
       <div className="flex w-full items-start gap-3">
-        <span className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-300/30 via-cyan-300/18 to-slate-200/8 text-emerald-100 ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-105">
-          {isImported ? <Archive size={18} /> : chat.type === "group" ? <Users size={18} /> : <MessageCircleMore size={18} />}
+        <span className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-400/70 via-pink-300/50 to-blue-400/60 text-white ring-2 ring-white/30 transition-transform duration-200 group-hover:scale-105 text-lg font-bold shadow-lg">
+          {isImported ? <Archive size={18} /> : chat.type === "group" ? <Users size={18} /> : title.charAt(0).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
@@ -67,7 +73,7 @@ export default function ChatListItem({ chat, isActive, onSelect, currentUserId }
               Imported
             </span>
           ) : null}
-          <p className={`mt-1 truncate rounded-md px-1 py-0.5 text-xs ${unread ? "bg-emerald-500/20 font-semibold text-emerald-50" : "text-slate-300/85"}`}>{preview}</p>
+          <p className={`mt-1 truncate rounded-md px-1 py-0.5 text-xs ${unread ? "font-semibold text-emerald-50" : "text-slate-300/85"}`}>{preview}</p>
         </div>
         {unread ? (
           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-gradient-to-br from-emerald-300 to-cyan-300 px-1.5 text-[11px] font-bold text-slate-950 shadow-[0_6px_14px_rgba(16,185,129,0.35)]">

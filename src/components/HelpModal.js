@@ -73,7 +73,7 @@ const STEPS = [
         border: "border-orange-400/30",
         bg: "bg-orange-500/10",
         description:
-            "Send messages, replay timeline, run AI tools, and use offline queue with auto-sync on reconnect.",
+            "Send messages, replay timeline, run AI tools, and open message actions (Reply/Delete) from the ^ icon on each bubble, or long-press/right-click.",
     },
     {
         number: "08",

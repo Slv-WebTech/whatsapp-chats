@@ -38,7 +38,9 @@ function getProviderOrder() {
 }
 
 export function getConfiguredAiProviders() {
-    const gatewayEnabled = import.meta.env.DEV ? true : String(import.meta.env.VITE_AI_GATEWAY_ENABLED || 'true').toLowerCase() !== 'false';
+    const gatewayEnabled = String(
+        import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
+    ).toLowerCase() !== 'false';
 
     return {
         hasOpenAI: gatewayEnabled,
@@ -56,6 +58,14 @@ function normalizeAiText(text) {
 }
 
 async function summarizeWithGateway(lastMessages) {
+    const gatewayEnabled = String(
+        import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
+    ).toLowerCase() !== 'false';
+
+    if (!gatewayEnabled) {
+        return { summary: '', provider: '' };
+    }
+
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 24000);
 

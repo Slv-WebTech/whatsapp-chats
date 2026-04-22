@@ -21,7 +21,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 
-const MESSAGE_LIMIT = 200;
+const MESSAGE_LIMIT = 500;
 const MESSAGE_PAGE_SIZE = 50;
 
 function ensureDb() {
@@ -52,6 +52,65 @@ export function sanitizeRoomId(rawRoomId) {
     return safe || 'room1';
 }
 
+/**
+ * Ensures the /chats/{chatId} document exists with the current user as a member.
+ * Called on chat load to recover from cases where the user deleted Firestore data
+ * for a fresh start. The Firestore rules allow create when the user is authenticated
+ * and includes themselves in the members list.
+ */
+export async function ensureChatDocument(chatId, authUid, extraMembers = []) {
+    ensureDb();
+    const safeChatId = String(chatId || '').trim();
+    const safeUid = String(authUid || '').trim();
+    if (!safeChatId || !safeUid) {
+        return;
+    }
+
+    const inferredMembers = safeChatId.includes('_')
+        ? safeChatId
+            .split('_')
+            .map((entry) => String(entry || '').trim())
+            .filter(Boolean)
+        : [];
+    const members = Array.from(new Set([safeUid, ...inferredMembers, ...extraMembers.map((u) => String(u).trim()).filter(Boolean)]));
+    const inferredType = safeChatId.includes('_') ? '1:1' : safeChatId.startsWith('shared-') ? 'shared' : 'group';
+
+    const chatRef = doc(db, 'chats', safeChatId);
+    const snap = await getDoc(chatRef);
+
+    if (!snap.exists()) {
+        await setDoc(
+            chatRef,
+            {
+                members,
+                type: inferredType,
+                name: inferredType === 'group' ? `Group ${safeChatId.slice(0, 8).toUpperCase()}` : null,
+                memberUsernames: {},
+                memberMeta: {
+                    [safeUid]: { lastReadAt: serverTimestamp() }
+                },
+                lastMessageText: '',
+                lastMessageAt: null,
+                lastSenderId: '',
+                lastSenderName: '',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            },
+            { merge: true }
+        );
+        return;
+    }
+
+    const existing = Array.isArray(snap.data()?.members) ? snap.data().members : [];
+    if (!existing.includes(safeUid)) {
+        await updateDoc(chatRef, {
+            members: arrayUnion(safeUid),
+            updatedAt: serverTimestamp(),
+            [`memberMeta.${safeUid}.lastReadAt`]: serverTimestamp()
+        });
+    }
+}
+const inferredType = safeChatId.includes('_') ? '1:1' : safeChatId.startsWith('shared-') ? 'shared' : 'room';
 function roomMessagesRef(roomId, options) {
     const { collectionName, safeChatId } = resolveChatOptions(roomId, options);
     return collection(db, collectionName, safeChatId, 'messages');
@@ -455,7 +514,29 @@ export async function deleteRoomMessage(roomId, messageId, options) {
         return;
     }
 
-    await deleteDoc(doc(roomMessagesRef(roomId, options), safeMessageId));
+    const messageRef = doc(roomMessagesRef(roomId, options), safeMessageId);
+    await updateDoc(messageRef, {
+        text: 'This message was deleted',
+        encrypted: false,
+        type: 'system',
+        deletedForEveryone: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+export async function hideRoomMessageForUser(roomId, messageId, userId, options) {
+    ensureDb();
+
+    const safeMessageId = String(messageId || '').trim();
+    const safeUserId = String(userId || '').trim();
+    if (!safeMessageId || !safeUserId) {
+        return;
+    }
+
+    await updateDoc(doc(roomMessagesRef(roomId, options), safeMessageId), {
+        [`deletedFor.${safeUserId}`]: true,
+        updatedAt: serverTimestamp()
+    });
 }
 
 export async function markMessageDelivered(roomId, messageId, userId, options) {
@@ -487,3 +568,4 @@ export async function markMessageRead(roomId, messageId, userId, options) {
         readAt: serverTimestamp()
     });
 }
+

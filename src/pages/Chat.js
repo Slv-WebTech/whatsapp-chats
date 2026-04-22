@@ -22,7 +22,7 @@ import { setAuthSession, setCurrentUser, setLastRoomId } from "../store/appSessi
 import { decryptMessage } from "../utils/encryption";
 import { setActiveChatRouteId } from "../utils/chatRouteState";
 
-function ChatEngine({ chat, chatSecret, profile, dispatch, onBackHome }) {
+function ChatEngine({ chat, chatSecret, profile, dispatch, onBackHome, onOpenSidebar }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -37,7 +37,7 @@ function ChatEngine({ chat, chatSecret, profile, dispatch, onBackHome }) {
     return null;
   }
 
-  return <LegacyChatApp key={chat.id} onBackHome={onBackHome} initialChatTitle={chat?.displayTitle || chat?.name || ''} initialChatId={chat?.id || ''} />;
+  return <LegacyChatApp key={chat.id} onBackHome={onBackHome} onOpenSidebar={onOpenSidebar} initialChatTitle={chat?.displayTitle || chat?.name || ''} initialChatId={chat?.id || ''} />;
 }
 
 function resolveTitle(chat, currentUserId) {
@@ -84,13 +84,21 @@ function getConversationSortTime(chat) {
 }
 
 function buildLastMessagePreview(chat) {
-  const raw = String(chat?.lastMessageText || '').trim();
+  const raw = String(
+    chat?.previewText ||
+    chat?.lastMessageText ||
+    chat?.lastMessagePreview ||
+    chat?.latestMessageText ||
+    chat?.lastMessage?.text ||
+    ''
+  ).trim();
+
   if (!raw) {
     return 'No messages yet';
   }
 
   if (raw.startsWith('U2FsdGVkX1')) {
-    if (chat?.type === '1:1') {
+    if (chat?.type !== 'group' && chat?.id) {
       try {
         return decryptMessage(raw, getDirectChatSecret(chat.id));
       } catch {
@@ -144,14 +152,81 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
       return undefined;
     }
 
-    return subscribeUserChats(authUser.uid, async (nextChatIds) => {
-      const items = await fetchChatsByIds(nextChatIds);
+    let cancelled = false;
+    let liveChatUnsubscribers = [];
+
+    const clearLiveSubscriptions = () => {
+      liveChatUnsubscribers.forEach((unsubscribe) => unsubscribe?.());
+      liveChatUnsubscribers = [];
+    };
+
+    const hydrateChatList = async (nextChatIds) => {
+      const safeChatIds = Array.from(new Set((nextChatIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+      clearLiveSubscriptions();
+
+      if (!safeChatIds.length) {
+        setChats([]);
+        return;
+      }
+
+      const items = await fetchChatsByIds(safeChatIds);
+      if (cancelled) {
+        return;
+      }
+
       setChats(items.map((entry) => ({
         ...entry,
         displayTitle: resolveTitle(entry, authUser.uid),
         previewText: buildLastMessagePreview(entry)
       })));
-    });
+
+      liveChatUnsubscribers = safeChatIds.map((id) =>
+        subscribeChat(
+          id,
+          (nextChat) => {
+            if (!nextChat || cancelled) {
+              return;
+            }
+
+            const normalized = {
+              ...nextChat,
+              displayTitle: resolveTitle(nextChat, authUser.uid),
+              previewText: buildLastMessagePreview(nextChat)
+            };
+
+            setChats((prev) => {
+              const withoutCurrent = prev.filter((entry) => entry.id !== normalized.id);
+              return [...withoutCurrent, normalized].sort((left, right) => getConversationSortTime(right) - getConversationSortTime(left));
+            });
+          },
+          () => {
+            // Keep list stable if one chat subscription fails.
+          }
+        )
+      );
+    };
+
+    const stopUserChatList = subscribeUserChats(
+      authUser.uid,
+      (nextChatIds) => {
+        hydrateChatList(nextChatIds).catch(() => {
+          if (!cancelled) {
+            setChats([]);
+          }
+        });
+      },
+      () => {
+        if (!cancelled) {
+          setChats([]);
+        }
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      stopUserChatList?.();
+      clearLiveSubscriptions();
+    };
   }, [authUser?.uid]);
 
   useEffect(() => {
@@ -301,7 +376,7 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
       />
 
       {/* Chat List - Expandable */}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2">
         {mergedChats.length > 0 ? (
           mergedChats.map((entry) => (
             <ChatListItem
@@ -329,7 +404,7 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
       </div>
 
       {/* Admin & Logout at Bottom */}
-      <div className="space-y-2 border-t border-[var(--border-soft)] pt-2.5">
+      <div className="fixed bottom-0 left-0 z-50 w-[75vw] max-w-[380px] border-t border-[var(--border-soft)] bg-[var(--panel-strong)] p-3 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:bg-transparent lg:border-0 lg:mt-auto lg:px-0 lg:py-3">
         <div className="flex items-center gap-2">
           {isAdmin ? (
             <Button
@@ -371,18 +446,6 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
       hideHeader
     >
       <div className="relative h-full">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/home")}
-          className="fixed left-2 top-[4.4rem] z-[70] h-9 w-9 rounded-full border border-white/25 bg-slate-950/60 text-white shadow-lg backdrop-blur md:hidden"
-          aria-label="Back to home"
-          title="Back to home"
-        >
-          <ArrowLeft size={16} />
-        </Button>
-
         {loading || !chat || !chatSecret ? (
           <div className="flex h-full items-center justify-center px-6">
             <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/40 px-6 py-5 text-sm text-slate-300 backdrop-blur-xl">
@@ -390,7 +453,7 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
             </div>
           </div>
         ) : (
-          <ChatEngine chat={chat} chatSecret={chatSecret} profile={profile} dispatch={dispatch} onBackHome={() => navigate('/home')} />
+          <ChatEngine chat={chat} chatSecret={chatSecret} profile={profile} dispatch={dispatch} onBackHome={() => navigate('/home')} onOpenSidebar={() => setSidebarOpen(true)} />
         )}
       </div>
     </Layout>

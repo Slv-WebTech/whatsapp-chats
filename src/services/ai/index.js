@@ -64,6 +64,14 @@ function setCached(cacheKey, value, ttlMs = 120000) {
 }
 
 async function requestAiGateway(task, payload, options = {}) {
+    const gatewayEnabled = String(
+        import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
+    ).toLowerCase() !== 'false';
+
+    if (!gatewayEnabled) {
+        return null;
+    }
+
     const { timeoutMs = API_TIMEOUT_MS, cacheKey = "", ttlMs = 120000 } = options;
     const cached = getCached(cacheKey);
     if (cached) {

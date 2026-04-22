@@ -7,16 +7,16 @@ const BRAND_ICON_DARK = `${import.meta.env.BASE_URL}lensiq-logo-icons-dark.png`;
 
 export default function Layout({ sidebar, children, sidebarOpen, onSidebarOpenChange, title, rightAction, showAdmin, hideHeader = false }) {
   return (
-    <div className="relative flex min-h-[100svh] max-w-full overflow-x-hidden text-[var(--text-main)]">
-      <aside className="hidden w-80 shrink-0 overflow-y-auto border-r border-[var(--border-soft)] bg-[var(--panel)] p-3 backdrop-blur-xl lg:flex lg:flex-col lg:p-4">{sidebar}</aside>
+    <div className="relative flex h-[100svh] min-h-[100svh] max-w-full overflow-hidden text-[var(--text-main)]">
+      <aside className="hidden h-full w-80 shrink-0 overflow-y-auto border-r border-[var(--border-soft)] bg-[var(--panel)] p-3 backdrop-blur-xl lg:flex lg:flex-col lg:p-4">{sidebar}</aside>
 
       <Sheet open={sidebarOpen} onOpenChange={onSidebarOpenChange}>
-        <SheetContent side="left" className="w-[min(88vw,380px)] border-r border-[var(--border-soft)] bg-[var(--panel-strong)] p-3 sm:p-4 lg:hidden">
+        <SheetContent side="left" className="w-[75vw] max-w-[380px] border-r border-[var(--border-soft)] bg-[var(--panel-strong)] p-3 sm:p-4 lg:hidden">
           {sidebar}
         </SheetContent>
       </Sheet>
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         {!hideHeader ? (
           <header className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] bg-[var(--panel-strong)] px-2.5 py-2 backdrop-blur-xl md:px-6 md:py-2.5">
             <div className="flex min-w-0 items-center gap-2">
@@ -52,7 +52,7 @@ export default function Layout({ sidebar, children, sidebarOpen, onSidebarOpenCh
           </header>
         ) : null}
 
-        <div className="min-h-0 flex-1">{children}</div>
+        <div className="min-h-0 flex-1 flex flex-col overflow-hidden">{children}</div>
       </main>
     </div>
   );
