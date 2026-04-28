@@ -240,7 +240,7 @@ async function generateWithOpenAI(prompt) {
                 messages: [
                     {
                         role: 'system',
-                        content: 'You are Lensiq AI. Be concise, safe, and practical.'
+                        content: 'You are BeyondStrings AI. Be concise, safe, and practical.'
                     },
                     {
                         role: 'user',

@@ -1,5 +1,5 @@
 import { ArrowLeft, LogOut, Palette, Settings, Sparkles, UserCircle2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Layout from './Layout';
 import { Button } from '../components/ui/button';
@@ -20,6 +20,8 @@ import {
 } from '../store/appSessionSlice';
 import { selectAuthProfile, selectIsAdmin, updateUserProfile } from '../store/authSlice';
 import { PRESET_CHAT_BACKGROUNDS } from '../utils/chatBackgrounds';
+import { fetchNotificationPreferences, saveNotificationPreferences } from '../services/api/notificationPreferences';
+import { cacheNotificationPreferences } from '../services/firebase/pushNotifications';
 
 export default function ProfilePage({ navigate, onLogout }) {
     const dispatch = useDispatch();
@@ -34,6 +36,15 @@ export default function ProfilePage({ navigate, onLogout }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [tab, setTab] = useState('account');
     const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
+    const [preferencesLoading, setPreferencesLoading] = useState(false);
+    const [preferencesSaving, setPreferencesSaving] = useState(false);
+    const [preferencesError, setPreferencesError] = useState('');
+    const [notificationPrefs, setNotificationPrefs] = useState({
+        messageAlerts: true,
+        mentionAlerts: true,
+        insightAlerts: true,
+        pushEnabled: true
+    });
 
     const resolvedTheme = useMemo(() => {
         if (themePreference !== 'system') {
@@ -97,6 +108,57 @@ export default function ProfilePage({ navigate, onLogout }) {
     const handleResetPreferences = () => {
         if (window.confirm('Reset all profile preferences to defaults?')) {
             dispatch(resetUserPreferences());
+        }
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (tab !== 'preferences') {
+            return () => { cancelled = true; };
+        }
+
+        setPreferencesLoading(true);
+        setPreferencesError('');
+
+        fetchNotificationPreferences()
+            .then((prefs) => {
+                if (cancelled || !prefs) return;
+                const normalized = {
+                    messageAlerts: Boolean(prefs.messageAlerts),
+                    mentionAlerts: Boolean(prefs.mentionAlerts),
+                    insightAlerts: Boolean(prefs.insightAlerts),
+                    pushEnabled: Boolean(prefs.pushEnabled)
+                };
+                setNotificationPrefs(normalized);
+                cacheNotificationPreferences(normalized);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setPreferencesError('Could not load notification preferences.');
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setPreferencesLoading(false);
+                }
+            });
+
+        return () => { cancelled = true; };
+    }, [tab]);
+
+    const updateNotificationPreference = async (key, value) => {
+        const next = { ...notificationPrefs, [key]: value };
+        setNotificationPrefs(next);
+        setPreferencesSaving(true);
+        setPreferencesError('');
+
+        try {
+            await saveNotificationPreferences(next);
+            cacheNotificationPreferences(next);
+        } catch {
+            setPreferencesError('Failed to save preferences. Please try again.');
+        } finally {
+            setPreferencesSaving(false);
         }
     };
 
@@ -227,6 +289,38 @@ export default function ProfilePage({ navigate, onLogout }) {
                             <h3 className="text-base font-semibold text-[var(--text-main)]">Quick Preferences</h3>
                             <p className="mt-2 text-sm text-[var(--text-muted)]">All profile and workspace personalization options are available in this screen. Changes sync securely through Redux + IndexedDB.</p>
                             <Button type="button" variant="outline" className="mt-4" onClick={handleResetPreferences}>Reset Preferences</Button>
+                        </div>
+
+                        <div className="rounded-[1.4rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] p-4">
+                            <h3 className="text-base font-semibold text-[var(--text-main)]">Notification Preferences</h3>
+                            <p className="mt-2 text-sm text-[var(--text-muted)]">Control message, mention, and insight alerts for web notifications.</p>
+
+                            {preferencesError ? (
+                                <p className="mt-3 text-xs text-rose-300">{preferencesError}</p>
+                            ) : null}
+
+                            <div className="mt-4 space-y-2">
+                                {[
+                                    { key: 'pushEnabled', label: 'Push notifications enabled' },
+                                    { key: 'messageAlerts', label: 'New message alerts' },
+                                    { key: 'mentionAlerts', label: 'Mention alerts' },
+                                    { key: 'insightAlerts', label: 'AI insight alerts' }
+                                ].map((item) => (
+                                    <label key={item.key} className="flex items-center justify-between rounded-xl border border-[var(--border-soft)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-main)]">
+                                        <span>{item.label}</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={Boolean(notificationPrefs[item.key])}
+                                            disabled={preferencesLoading || preferencesSaving}
+                                            onChange={(event) => updateNotificationPreference(item.key, event.target.checked)}
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+
+                            {(preferencesLoading || preferencesSaving) ? (
+                                <p className="mt-3 text-xs text-[var(--text-muted)]">Syncing preferences...</p>
+                            ) : null}
                         </div>
                     </div>
                 ) : null}

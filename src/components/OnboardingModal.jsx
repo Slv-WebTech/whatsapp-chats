@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, MessageCircle, Shield, Sparkles, UploadCloud, X } from "lucide-react";
+import { BRAND } from "../config/branding";
 
 const STEPS = [
   {
     icon: Sparkles,
     color: "from-emerald-400 to-teal-500",
-    title: "Welcome to Lensiq",
+    title: `Welcome to ${BRAND.name}`,
     desc: "An AI-powered Conversation Intelligence Platform that helps you understand, analyse, and act on your chats.",
   },
   {
@@ -35,7 +36,7 @@ const STEPS = [
   },
 ];
 
-const ONBOARDING_KEY = "lensiq_onboarding_done_v1";
+const ONBOARDING_KEY = "beyondstrings_onboarding_done_v1";
 
 export function useOnboarding() {
   const [show, setShow] = useState(() => !localStorage.getItem(ONBOARDING_KEY));

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BeyondStrings Offline</title>
+    <meta name="theme-color" content="#0f172a" />
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100dvh;
+            display: grid;
+            place-items: center;
+            background: radial-gradient(circle at 20% 20%, #1e293b 0%, #0f172a 44%, #020617 100%);
+            color: #e2e8f0;
+        }
+
+        .card {
+            width: min(92vw, 420px);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(15, 23, 42, 0.68);
+            border-radius: 18px;
+            padding: 22px;
+            box-shadow: 0 24px 40px rgba(2, 6, 23, 0.45);
+            backdrop-filter: blur(4px);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 1.15rem;
+        }
+
+        p {
+            margin: 0;
+            font-size: 0.93rem;
+            line-height: 1.5;
+            color: #cbd5e1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>You are offline</h1>
+        <p>BeyondStrings is working in offline mode. Your queued actions will sync automatically when your connection is
+            restored.</p>
+    </div>
+</body>
+
+</html>

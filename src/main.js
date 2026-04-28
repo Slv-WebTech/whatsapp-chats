@@ -6,12 +6,13 @@ import RootApp from './app/router/RootApp';
 import AppErrorBoundary from './shared/components/layout/AppErrorBoundary';
 import './index.css';
 import { persistor, store } from './app/store/store';
-import { BRAND } from './shared/config/branding';
-import { BRAND_SW_CACHE_PREFIX } from './config/brandTokens';
+import { BRAND, BRAND_ASSETS } from './shared/config/branding';
+import { BRAND_SW_CACHE_PREFIX, BRAND_SYNC_TAG } from './config/brandTokens';
+import { initializePushNotifications } from './services/firebase/pushNotifications';
 
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
-const DARK_FAVICON = `${import.meta.env.BASE_URL}favicon-dark-32x32.ico`;
-const LIGHT_FAVICON = `${import.meta.env.BASE_URL}favicon-light-32x32.ico`;
+const DARK_FAVICON = BRAND_ASSETS.faviconDark;
+const LIGHT_FAVICON = BRAND_ASSETS.faviconLight;
 const DARK_THEME_COLOR = '#0f172a';
 const LIGHT_THEME_COLOR = '#f8fafc';
 
@@ -52,6 +53,92 @@ const showAppUpdateToast = () => {
     document.body.appendChild(toast);
     window.requestAnimationFrame(() => {
         toast.style.opacity = '1';
+    });
+};
+
+const showInstallPrompt = (deferredPrompt) => {
+    if (typeof document === 'undefined' || !deferredPrompt) {
+        return;
+    }
+
+    const existingBanner = document.getElementById('app-install-banner');
+    if (existingBanner) {
+        return;
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'app-install-banner';
+    Object.assign(banner.style, {
+        position: 'fixed',
+        left: '50%',
+        bottom: '24px',
+        transform: 'translateX(-50%)',
+        zIndex: '10000',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '10px 12px',
+        borderRadius: '12px',
+        border: '1px solid rgba(148,163,184,0.45)',
+        background: 'rgba(15,23,42,0.95)',
+        color: '#e2e8f0',
+        fontFamily: "'Inter', 'Segoe UI', sans-serif",
+        fontSize: '0.78rem',
+        boxShadow: '0 16px 34px rgba(2,6,23,0.35)'
+    });
+
+    const label = document.createElement('span');
+    label.textContent = `Install ${BRAND.name} for faster access`;
+
+    const installButton = document.createElement('button');
+    installButton.type = 'button';
+    installButton.textContent = 'Install';
+    Object.assign(installButton.style, {
+        borderRadius: '999px',
+        border: '1px solid rgba(16,185,129,0.45)',
+        background: 'rgba(16,185,129,0.25)',
+        color: '#d1fae5',
+        padding: '4px 10px',
+        cursor: 'pointer'
+    });
+
+    const dismissButton = document.createElement('button');
+    dismissButton.type = 'button';
+    dismissButton.textContent = 'Later';
+    Object.assign(dismissButton.style, {
+        borderRadius: '999px',
+        border: '1px solid rgba(148,163,184,0.4)',
+        background: 'transparent',
+        color: '#cbd5e1',
+        padding: '4px 10px',
+        cursor: 'pointer'
+    });
+
+    installButton.addEventListener('click', async () => {
+        banner.remove();
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice.catch(() => {
+            // Ignore user cancellation.
+        });
+    });
+
+    dismissButton.addEventListener('click', () => {
+        banner.remove();
+    });
+
+    banner.appendChild(label);
+    banner.appendChild(installButton);
+    banner.appendChild(dismissButton);
+    document.body.appendChild(banner);
+};
+
+const tryRegisterBackgroundSync = (registration) => {
+    if (!registration?.sync || typeof registration.sync.register !== 'function') {
+        return;
+    }
+
+    registration.sync.register(BRAND_SYNC_TAG).catch(() => {
+        // Not supported on all browsers or blocked by user settings.
     });
 };
 
@@ -173,6 +260,14 @@ if (typeof document !== 'undefined') {
 }
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    let deferredInstallPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        showInstallPrompt(deferredInstallPrompt);
+    });
+
     window.addEventListener('load', () => {
         navigator.serviceWorker
             .register(`${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(APP_VERSION)}&cp=${encodeURIComponent(BRAND_SW_CACHE_PREFIX)}`, {
@@ -181,6 +276,13 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
             .then((registration) => {
                 registration.update().catch(() => {
                     // Ignore update check failures.
+                });
+
+                tryRegisterBackgroundSync(registration);
+                window.addEventListener('online', () => tryRegisterBackgroundSync(registration));
+
+                initializePushNotifications(registration).catch(() => {
+                    // Notifications are optional; silently ignore setup failures.
                 });
 
                 if (registration.waiting) {

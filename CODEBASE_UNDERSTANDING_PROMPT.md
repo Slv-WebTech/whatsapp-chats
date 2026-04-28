@@ -1,8 +1,8 @@
-# Lensiq Codebase Understanding + Token-Efficient Prompt Seed
+# BeyondStrings Codebase Understanding + Token-Efficient Prompt Seed
 
 ## 1) Project Identity
 
-- Product: Lensiq (encrypted chat workspace).
+- Product: BeyondStrings (encrypted chat workspace).
 - Stack: React 18 + Vite 5 + Tailwind + Redux Toolkit + redux-persist + Firebase Auth/Firestore.
 - Runtime style: mobile-first, single-page app, custom lightweight router.
 - Primary modes:
@@ -67,7 +67,7 @@
 
 ### 4.3 Offline Queue
 
-- Queue storage: IndexedDB store lensiq-offline-queue (src/utils/offlineMessageQueue.js).
+- Queue storage: IndexedDB store beyondstrings-offline-queue (src/utils/offlineMessageQueue.js).
 - Behavior:
   - optimistic queued messages are merged into UI.
   - automatic flush on reconnect / when online.
@@ -143,7 +143,7 @@ Use this block as a seed for future implementation prompts.
 
 ```text
 ROLE
-You are implementing features in Lensiq (React+Vite+Firebase encrypted chat app). Keep changes minimal, safe, and mobile-first.
+You are implementing features in BeyondStrings (React+Vite+Firebase encrypted chat app). Keep changes minimal, safe, and mobile-first.
 
 CODEBASE FACTS
 - Routing/auth shell: src/RootApp.js + src/hooks/useSimpleRouter.js

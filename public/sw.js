@@ -1,7 +1,7 @@
 const appVersion = new URL(self.location.href).searchParams.get('v') || 'dev';
 const cachePrefix = new URL(self.location.href).searchParams.get('cp') || 'app-cache';
 const CACHE_NAME = `${cachePrefix}-${appVersion}`;
-const APP_SHELL_FILES = ['./', './index.html', './site.webmanifest'];
+const APP_SHELL_FILES = ['./', './index.html', './offline.html', './site.webmanifest'];
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -87,8 +87,13 @@ self.addEventListener('fetch', (event) => {
                     return response;
                 })
                 .catch(async () => {
-                    const cached = await caches.match('./index.html');
-                    return cached || Response.error();
+                    const cachedPage = await caches.match('./index.html');
+                    if (cachedPage) {
+                        return cachedPage;
+                    }
+
+                    const offlinePage = await caches.match('./offline.html');
+                    return offlinePage || Response.error();
                 })
         );
         return;
@@ -111,4 +116,39 @@ self.addEventListener('fetch', (event) => {
             });
         })
     );
+});
+
+self.addEventListener('sync', (event) => {
+    if (event.tag !== 'beyondstrings-sync') {
+        return;
+    }
+
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            clientList.forEach((client) => {
+                client.postMessage({ type: 'SYNC_RETRY_OFFLINE_QUEUE' });
+            });
+        })
+    );
+});
+
+self.addEventListener('push', (event) => {
+    let payload = {};
+
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch {
+        payload = { notification: { title: 'BeyondStrings', body: event.data?.text() || 'New message' } };
+    }
+
+    const title = String(payload?.notification?.title || payload?.title || 'BeyondStrings');
+    const options = {
+        body: String(payload?.notification?.body || payload?.body || 'You have a new message.'),
+        icon: payload?.notification?.icon || payload?.icon,
+        badge: payload?.notification?.badge || payload?.badge,
+        tag: payload?.notification?.tag || payload?.tag || 'beyondstrings-push',
+        data: payload?.data || { url: './' }
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
 });

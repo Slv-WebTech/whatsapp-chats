@@ -1,4 +1,4 @@
-const DB_NAME = 'lensiq-state-db';
+const DB_NAME = 'beyondstrings-state-db';
 const STORE_NAME = 'kv';
 
 let openDbPromise = null;

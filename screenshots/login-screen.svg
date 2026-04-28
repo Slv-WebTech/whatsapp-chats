@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
   <title id="title">Login Screen Placeholder</title>
-  <desc id="desc">Placeholder image for the Lensiq login screen screenshot.</desc>
+  <desc id="desc">Placeholder image for the BeyondStrings login screen screenshot.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a" />
@@ -10,7 +10,7 @@
   </defs>
   <rect width="1440" height="900" fill="url(#bg)" rx="24" />
   <rect x="120" y="90" width="1200" height="720" rx="32" fill="rgba(15,23,42,0.4)" stroke="rgba(255,255,255,0.16)" />
-  <text x="720" y="380" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="52" font-weight="700">Lensiq</text>
+  <text x="720" y="380" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="52" font-weight="700">BeyondStrings</text>
   <text x="720" y="450" text-anchor="middle" fill="#dbeafe" font-family="Segoe UI, Arial, sans-serif" font-size="28">Login Screen Placeholder</text>
   <text x="720" y="515" text-anchor="middle" fill="#bfdbfe" font-family="Segoe UI, Arial, sans-serif" font-size="20">Replace this file with your real screenshot later</text>
 </svg>

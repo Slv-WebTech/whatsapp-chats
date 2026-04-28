@@ -1,12 +1,12 @@
 {
-  "name": "Lensiq",
-  "short_name": "Lensiq",
+  "name": "BeyondStrings",
+  "short_name": "BeyondStrings",
   "description": "See Conversations Smarter. Encrypted real-time private chat.",
   "start_url": "./",
   "scope": "./",
   "icons": [
-    { "src": "./lensiq-logo-icons-light.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "./lensiq-logo-light.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "./web-app-manifest-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./web-app-manifest-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "theme_color": "#1f8f63",
   "background_color": "#0f172a",

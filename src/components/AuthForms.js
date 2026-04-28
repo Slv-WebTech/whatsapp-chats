@@ -7,10 +7,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { clearAuthError, loginUser, registerUser, selectAuthError, selectAuthStatus, updateUserProfile } from "../store/authSlice";
-import { BRAND } from "../config/branding";
-
-const BRAND_LOGO_DARK = `${import.meta.env.BASE_URL}lensiq-logo-dark.png`;
-const BRAND_LOGO_LIGHT = `${import.meta.env.BASE_URL}lensiq-logo-light.png`;
+import { BRAND, BRAND_ASSETS } from "../config/branding";
 
 function UsernameSetupDialog({ open, onOpenChange, onSuccess, visualTheme }) {
   const dispatch = useDispatch();
@@ -193,7 +190,7 @@ export default function AuthForms({ onAuthenticated }) {
   const [moodMode, setMoodMode] = useState("professional");
   const [visualTheme, setVisualTheme] = useState("dark");
   const isProfessional = moodMode === "professional";
-  const isRomantic = moodMode === "romantic";
+  const isCasual = moodMode === "casual";
   const isLightTheme = visualTheme === "light";
 
   const shellClass = isLightTheme
@@ -204,7 +201,7 @@ export default function AuthForms({ onAuthenticated }) {
       ? "bg-[radial-gradient(circle_at_12%_16%,rgba(56,189,248,0.2),transparent_32%),radial-gradient(circle_at_84%_82%,rgba(16,185,129,0.16),transparent_28%),linear-gradient(150deg,#050f18_0%,#0f1f2f_100%)]"
       : "bg-[radial-gradient(circle_at_14%_18%,rgba(244,114,182,0.22),transparent_34%),radial-gradient(circle_at_84%_82%,rgba(251,113,133,0.18),transparent_32%),linear-gradient(150deg,#180a18_0%,#2a1025_100%)]";
 
-  const wallpaperClass = isRomantic
+  const wallpaperClass = isCasual
     ? "bg-[radial-gradient(circle_at_72%_76%,rgba(244,114,182,0.22),transparent_44%),repeating-linear-gradient(135deg,rgba(255,255,255,0.08)_0px,rgba(255,255,255,0.08)_1px,transparent_1px,transparent_24px),repeating-linear-gradient(135deg,rgba(255,255,255,0.04)_0px,rgba(255,255,255,0.04)_1px,transparent_1px,transparent_48px)]"
     : "bg-[radial-gradient(circle_at_80%_76%,rgba(56,189,248,0.18),transparent_42%),repeating-linear-gradient(135deg,rgba(148,163,184,0.1)_0px,rgba(148,163,184,0.1)_1px,transparent_1px,transparent_24px),repeating-linear-gradient(135deg,rgba(148,163,184,0.05)_0px,rgba(148,163,184,0.05)_1px,transparent_1px,transparent_48px)]";
 
@@ -216,10 +213,10 @@ export default function AuthForms({ onAuthenticated }) {
   const bodyTextClass = isLightTheme ? "text-slate-600" : "text-slate-300/85";
   const chipClass = isLightTheme ? "border-slate-300 bg-white/70 text-slate-700" : "border-white/20 bg-white/10 text-slate-100";
   const segmentBaseClass = isLightTheme ? "border-slate-300 bg-white/70 text-slate-600" : "border-white/15 bg-white/5 text-slate-300";
-  const moodSwitchLabel = moodMode === "professional" ? "Romantic" : "Professional";
+  const moodSwitchLabel = moodMode === "professional" ? "Casual" : "Professional";
   const themeSwitchTarget = visualTheme === "dark" ? "light" : "dark";
 
-  const primaryButtonClass = isRomantic
+  const primaryButtonClass = isCasual
     ? "bg-gradient-to-r from-pink-500 to-fuchsia-500 text-white hover:from-pink-400 hover:to-fuchsia-400"
     : "bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-400 hover:to-cyan-400";
 
@@ -255,8 +252,8 @@ export default function AuthForms({ onAuthenticated }) {
 
   return (
     <div className={`relative flex min-h-[100svh] items-center justify-center overflow-hidden px-4 py-8 transition-all sm:px-6 ${shellClass}`}>
-      <div className={`hero-orb left-[-70px] top-[6%] h-44 w-44 ${isRomantic ? "bg-pink-300/28" : "bg-cyan-300/24"}`} />
-      <div className={`hero-orb right-[-60px] top-[18%] h-64 w-64 ${isRomantic ? "bg-fuchsia-300/26" : "bg-emerald-300/22"}`} />
+      <div className={`hero-orb left-[-70px] top-[6%] h-44 w-44 ${isCasual ? "bg-pink-300/28" : "bg-cyan-300/24"}`} />
+      <div className={`hero-orb right-[-60px] top-[18%] h-64 w-64 ${isCasual ? "bg-fuchsia-300/26" : "bg-emerald-300/22"}`} />
       <div className={`pointer-events-none absolute inset-0 opacity-80 ${wallpaperClass}`} />
       <div className={`pointer-events-none absolute inset-0 ${shellVeilClass}`} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(15,23,42,0.08)_100%)]" />
@@ -289,17 +286,17 @@ export default function AuthForms({ onAuthenticated }) {
                       <button
                         type="button"
                         aria-label={moodSwitchLabel}
-                        onClick={() => setMoodMode((current) => (current === "professional" ? "romantic" : "professional"))}
+                        onClick={() => setMoodMode((current) => (current === "professional" ? "casual" : "professional"))}
                         className={`relative inline-flex h-8 w-[5rem] items-center rounded-full border px-1 transition ${segmentBaseClass}`}
                       >
                         <span className="inline-flex w-full items-center justify-between px-1" aria-hidden="true">
                           <Briefcase size={12} className={isProfessional ? "text-emerald-500" : "opacity-50"} />
-                          <Heart size={12} className={isRomantic ? "text-pink-500" : "opacity-50"} />
+                          <Heart size={12} className={isCasual ? "text-pink-500" : "opacity-50"} />
                         </span>
                         <span
-                          className={`pointer-events-none absolute top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-700 shadow transition-all dark:bg-slate-200 ${isRomantic ? "left-[3.25rem]" : "left-1"}`}
+                          className={`pointer-events-none absolute top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-700 shadow transition-all dark:bg-slate-200 ${isCasual ? "left-[3.25rem]" : "left-1"}`}
                         >
-                          {isRomantic ? <Heart size={11} /> : <Briefcase size={11} />}
+                          {isCasual ? <Heart size={11} /> : <Briefcase size={11} />}
                         </span>
                       </button>
 
@@ -327,12 +324,12 @@ export default function AuthForms({ onAuthenticated }) {
           </div>
 
           <section className={`space-y-4 rounded-[1.3rem] border p-5 transition-all backdrop-blur-xl ${panelClass}`}>
-            <img
-              src={isLightTheme ? BRAND_LOGO_LIGHT : BRAND_LOGO_DARK}
+              <img
+              src={isLightTheme ? BRAND_ASSETS.logoLight : BRAND_ASSETS.logoDark}
               alt={BRAND.name}
               className="h-14 w-auto max-w-[11rem] object-contain"
             />
-            <p className={`text-[11px] font-bold uppercase tracking-[0.28em] ${isRomantic ? "text-pink-400/90" : "text-emerald-400/90"}`}>{BRAND.name}</p>
+            <p className={`text-[11px] font-bold uppercase tracking-[0.28em] ${isCasual ? "text-pink-400/90" : "text-emerald-400/90"}`}>{BRAND.name}</p>
             <h1 className={`text-3xl leading-tight tracking-tight sm:text-[2rem] ${isLightTheme ? "text-slate-900" : "text-white"}`}>{BRAND.tagline}</h1>
             <p className={`text-sm leading-6 ${bodyTextClass}`}>Real accounts, direct + group chats, end-to-end encrypted.</p>
             <div className="flex flex-wrap gap-2 text-xs font-medium">

@@ -14,6 +14,13 @@ This manifest reflects the current documentation and architecture after the App 
 - PROJECT_COMPLETION.md — project milestone record
 - FILE_MANIFEST.md — this file
 
+## Branding Source of Truth
+
+- `src/config/branding.js` — canonical app name, tagline, and asset references.
+- `src/config/brandTokens.js` — derived brand keys/tokens used across runtime.
+- `index.html` — SEO metadata (title/description/OpenGraph/Twitter).
+- `public/site.webmanifest` — PWA app name and icons.
+
 ## Key Application Files
 
 ### Entry & Routing
@@ -82,7 +89,7 @@ This manifest reflects the current documentation and architecture after the App 
 
 ### Config
 
-- `src/config/branding.js` — Brand name and tagline (`Lensiq`).
+- `src/config/branding.js` — Brand name and tagline (`BeyondStrings`).
 - `src/config/brandTokens.js` — Design tokens.
 
 ### Security Rules

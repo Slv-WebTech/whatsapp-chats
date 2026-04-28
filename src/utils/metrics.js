@@ -10,8 +10,8 @@
  *   const stats = getMetrics();
  */
 
-const STORAGE_KEY = 'lensiq_metrics_v1';
-const SESSION_KEY = 'lensiq_session_v1';
+const STORAGE_KEY = 'beyondstrings_metrics_v1';
+const SESSION_KEY = 'beyondstrings_session_v1';
 
 function loadStore() {
     try {

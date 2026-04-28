@@ -1,13 +1,13 @@
 ROLE
 You are a principal-level frontend architect, product manager, and AI systems designer.
 
-Your task is to transform my existing application “Lensiq” from a feature-rich chat project into a production-grade, market-ready product.
+Your task is to transform my existing application “BeyondStrings” from a feature-rich chat project into a production-grade, market-ready product.
 
 ---
 
 ## CURRENT SYSTEM CONTEXT (IMPORTANT)
 
-Lensiq is a React + Vite + Firebase app with:
+BeyondStrings is a React + Vite + Firebase app with:
 
 - Real-time chat (Firestore)
 - Client-side encrypted messaging
@@ -33,7 +33,7 @@ But it must become:
 
 ## TARGET PRODUCT VISION
 
-Lensiq should help users:
+BeyondStrings should help users:
 
 - Understand conversations
 - Extract meaningful insights
@@ -310,7 +310,7 @@ Track:
 
 ## FINAL GOAL
 
-Transform Lensiq into:
+Transform BeyondStrings into:
 
 - A real-world product (not just a demo)
 - AI-first communication platform
@@ -352,13 +352,13 @@ Think like:
 ROLE
 You are a senior full-stack engineer and product-focused developer.
 
-Your task is to implement a production-grade upgrade of the Lensiq application by breaking work into structured GitHub tasks and executing them safely within the existing architecture.
+Your task is to implement a production-grade upgrade of the BeyondStrings application by breaking work into structured GitHub tasks and executing them safely within the existing architecture.
 
 ---
 
 ## PROJECT CONTEXT
 
-Lensiq is a React + Vite + Firebase AI-powered chat application with:
+BeyondStrings is a React + Vite + Firebase AI-powered chat application with:
 
 - Real-time chat (Firestore)
 - Client-side encryption
@@ -372,7 +372,7 @@ Lensiq is a React + Vite + Firebase AI-powered chat application with:
 
 ## PRODUCT GOAL
 
-Transform Lensiq from:
+Transform BeyondStrings from:
 → “Chat app with AI features”
 
 Into:

@@ -7,8 +7,8 @@ export const DEFAULT_PREFERENCES = {
     // Theme preference: light, dark, or system (follows OS)
     THEME_PREFERENCE: 'dark',
 
-    // Chat mode: formal or romantic
-    CHAT_MODE: 'romantic',
+    // Chat mode: professional or casual
+    CHAT_MODE: 'casual',
 
     // Current user display name
     CURRENT_USER: 'You',
@@ -22,7 +22,7 @@ export const DEFAULT_PREFERENCES = {
 
     // Theme values for validation/filtering
     VALID_THEMES: ['light', 'dark', 'system'],
-    VALID_CHAT_MODES: ['formal', 'romantic'],
+    VALID_CHAT_MODES: ['professional', 'casual'],
 };
 
 /**
@@ -62,8 +62,19 @@ export function normalizeThemePreference(theme) {
  * Validate and normalize a chat mode value
  */
 export function normalizeChatMode(mode) {
-    return DEFAULT_PREFERENCES.VALID_CHAT_MODES.includes(mode)
-        ? mode
+    const safeMode = String(mode || '').trim().toLowerCase();
+
+    // Backward compatibility with persisted legacy values.
+    if (safeMode === 'romantic') {
+        return 'casual';
+    }
+
+    if (safeMode === 'formal') {
+        return 'professional';
+    }
+
+    return DEFAULT_PREFERENCES.VALID_CHAT_MODES.includes(safeMode)
+        ? safeMode
         : DEFAULT_PREFERENCES.CHAT_MODE;
 }
 

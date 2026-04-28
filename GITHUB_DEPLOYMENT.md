@@ -7,6 +7,11 @@ Repository:
 - Default branch: main
 - Active working branch: development
 
+Product Branding:
+
+- App Name: `BeyondStrings`
+- Tagline: `See Conversations Smarter`
+
 ## Push Current Branch
 
 ```bash

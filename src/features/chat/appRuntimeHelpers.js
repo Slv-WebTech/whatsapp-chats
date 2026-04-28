@@ -2,6 +2,15 @@ import { PRESET_CHAT_BACKGROUNDS } from '../../utils/chatBackgrounds';
 import { decryptMessage } from '../../utils/encryption';
 
 export const DEFAULT_CHAT_BACKGROUND = {
+    professional: {
+        light: 'https://images.unsplash.com/photo-1487611459768-bd414656ea10?fm=jpg&q=80&w=2400&auto=format&fit=crop',
+        dark: 'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?fm=jpg&q=80&w=2400&auto=format&fit=crop'
+    },
+    casual: {
+        light: 'https://wallpapercave.com/wp/wp2746574.jpg',
+        dark: 'https://4kwallpapers.com/images/wallpapers/romantic-love-5120x2880-24698.jpg'
+    },
+    // Legacy aliases for backward compatibility with old persisted state.
     formal: {
         light: 'https://images.unsplash.com/photo-1487611459768-bd414656ea10?fm=jpg&q=80&w=2400&auto=format&fit=crop',
         dark: 'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?fm=jpg&q=80&w=2400&auto=format&fit=crop'
@@ -103,13 +112,15 @@ export function parseChatDateTime(dateText, timeText) {
 }
 
 export function pickBackgroundTone({ chatMode, resolvedTheme, selectedBackground, presetOption }) {
+    const normalizedChatMode = String(chatMode || '').trim().toLowerCase();
     const normalized = `${presetOption?.label || ''} ${selectedBackground || ''}`.toLowerCase();
     const isDarkBackground =
         resolvedTheme === 'dark' ||
         presetOption?.mode === 'dark' ||
         /night|midnight|dark|moon|silhouette/.test(normalized);
     const isRomanticBackground =
-        chatMode === 'romantic' ||
+        normalizedChatMode === 'casual' ||
+        normalizedChatMode === 'romantic' ||
         /romantic|love|heart|pink|valentine|rose|couple/.test(normalized);
 
     if (isRomanticBackground && isDarkBackground) {
@@ -192,15 +203,22 @@ export function getBackgroundThemeTokens(tone) {
 }
 
 export function getEligiblePresetBackgrounds(chatMode, resolvedTheme) {
+    const normalizedChatMode = String(chatMode || '').trim().toLowerCase();
+    const aliases = normalizedChatMode === 'casual'
+        ? ['casual', 'romantic']
+        : normalizedChatMode === 'professional'
+            ? ['professional', 'formal']
+            : [normalizedChatMode];
+
     const exactMatches = PRESET_CHAT_BACKGROUNDS.filter(
-        (item) => item.chatMode === chatMode && item.mode === resolvedTheme
+        (item) => aliases.includes(String(item.chatMode || '').toLowerCase()) && item.mode === resolvedTheme
     );
 
     if (exactMatches.length) {
         return exactMatches;
     }
 
-    return PRESET_CHAT_BACKGROUNDS.filter((item) => item.chatMode === chatMode);
+    return PRESET_CHAT_BACKGROUNDS.filter((item) => aliases.includes(String(item.chatMode || '').toLowerCase()));
 }
 
 export function pickRandomPresetBackgroundId(options) {

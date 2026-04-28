@@ -26,7 +26,7 @@ const isValidSessionState = (session) => {
 
     return (
         hasValidAuthSession &&
-        ['romantic', 'formal'].includes(session.chatMode) &&
+        ['casual', 'professional', 'romantic', 'formal'].includes(session.chatMode) &&
         ['light', 'dark', 'system'].includes(session.themePreference) &&
         hasValidString(session.currentUser) &&
         hasValidString(session.lastRoomId) &&

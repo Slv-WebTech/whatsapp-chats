@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Brain, MessageCircle, UploadCloud, LogIn, Sparkles, Shield, Zap } from "lucide-react";
+import { BRAND } from "../config/branding";
 
 const FEATURES = [
   { icon: Brain, title: "AI-Powered Insights", desc: "Summaries, tasks, and key decisions extracted automatically." },
@@ -57,7 +58,7 @@ export default function LandingPage({ onSignIn, onSelectAction }) {
               <Sparkles size={30} className="text-white" />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-[var(--text-main)] lg:text-4xl">
-              Lens<span className="text-emerald-500">iq</span>
+              {BRAND.name}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)] lg:max-w-[34ch] lg:text-base">
               AI-powered Conversation Intelligence Platform built for teams that want faster decisions from every conversation.
@@ -66,7 +67,7 @@ export default function LandingPage({ onSignIn, onSelectAction }) {
 
           {/* Feature pills */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }} className="space-y-3 lg:max-w-xl">
-            <p className="text-center text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)] lg:text-left">Why Lensiq</p>
+            <p className="text-center text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)] lg:text-left">{`Why ${BRAND.name}`}</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
               {FEATURES.map((f) => (
                 <div key={f.title} className="glass-panel flex items-start gap-3 rounded-xl px-3 py-2.5">

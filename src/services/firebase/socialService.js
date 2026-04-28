@@ -26,6 +26,7 @@ import {
     signOut
 } from 'firebase/auth';
 import { auth, db } from './config';
+import { clearProfileCache } from '../../utils/profileCache';
 import { BRAND_EMAIL_DOMAIN } from '../../config/brandTokens';
 
 const USERNAME_PATTERN = /^[A-Z][A-Za-z0-9_]{2,19}$/;
@@ -297,6 +298,9 @@ export async function updateUserProfile(updates) {
 
 export async function signOutCurrentUser() {
     ensureFirebase();
+    // Clear the in-memory profile cache so stale data doesn't persist
+    // if another user signs in on the same tab.
+    clearProfileCache();
     await signOut(auth);
 }
 
@@ -406,20 +410,8 @@ export async function fetchChatsByIds(chatIds) {
                 String(data.lastMessage?.text || '').trim();
             let resolvedLastMessageAt = data.lastMessageAt || null;
 
-            if (!resolvedPreview) {
-                try {
-                    const latestMessageSnapshot = await getDocs(
-                        query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'desc'), limit(1))
-                    );
-                    const latestMessage = latestMessageSnapshot.docs[0]?.data() || null;
-                    resolvedPreview = String(latestMessage?.text || '').trim();
-                    if (!resolvedLastMessageAt && latestMessage?.createdAt) {
-                        resolvedLastMessageAt = latestMessage.createdAt;
-                    }
-                } catch {
-                    // Ignore preview fallback failures so chat list remains usable.
-                }
-            }
+            // Cost optimization: never fan-out query messages per chat row.
+            // Chat previews must come from denormalized chat metadata fields.
 
             return toSerializable({
                 id: chatId,

@@ -1,6 +1,23 @@
-# Lensiq
+# BeyondStrings
 
-Lensiq is a premium encrypted chat workspace built with React, Vite, Firebase, and Redux.
+BeyondStrings is a premium encrypted chat workspace built with React, Vite, Firebase, and Redux.
+
+## Branding
+
+- App Name: `BeyondStrings`
+- Tagline: `See Conversations Smarter`
+- Primary branding config: `src/config/branding.js`
+- Package name: `beyondstrings`
+- PWA manifest name: `BeyondStrings` (`public/site.webmanifest`)
+
+### Brand Assets (public)
+
+- `favicon.ico`
+- `favicon.svg`
+- `favicon-96x96.png`
+- `apple-touch-icon.png`
+- `web-app-manifest-192x192.png`
+- `web-app-manifest-512x512.png`
 
 ## Current Status
 

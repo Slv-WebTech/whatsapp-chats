@@ -1,5 +1,12 @@
 # Quick Start Guide
 
+## Branding Snapshot
+
+- App Name: `BeyondStrings`
+- Tagline: `See Conversations Smarter`
+- Update once in: `src/config/branding.js`
+- PWA/SEO metadata lives in: `index.html` and `public/site.webmanifest`
+
 ## 1) Install and Run
 
 ```bash

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { getHighlightParts } from '../../../utils/highlight';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, CheckCheck, ChevronDown, FileText, Info, Mic, Phone, Play, Video } from 'lucide-react';
+import { Check, CheckCheck, ChevronDown, FileText, Info, Mic, Phone, Play, SmilePlus, Video } from 'lucide-react';
 import { clsx } from 'clsx';
+import EmojiPicker from 'emoji-picker-react';
 import { classifyMessage, getCallDetails, getMediaLabel, getResolvableMediaSource, getVoiceDuration } from '../../../utils/messageTypes';
 
 function MessageHighlight({ message, query, reduceMotion }) {
@@ -124,6 +125,7 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
     const longPressTimerRef = useRef(null);
     const bubbleContainerRef = useRef(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
     const messageType = classifyMessage(message);
     const reactionEntries = Object.entries(message.reactions || {}).filter(([, count]) => Number(count) > 0);
     const normalizedText = String(message?.message || '').trim();
@@ -138,12 +140,14 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
         const handleOutside = (event) => {
             if (!bubbleContainerRef.current?.contains(event.target)) {
                 setMenuOpen(false);
+                setReactionPickerOpen(false);
             }
         };
 
         const handleEscape = (event) => {
             if (event.key === 'Escape') {
                 setMenuOpen(false);
+                setReactionPickerOpen(false);
             }
         };
 
@@ -248,6 +252,14 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                             <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left hover:bg-white/10" onClick={() => { onForward?.(message); setMenuOpen(false); }}>
                                 Forward
                             </button>
+                            <button
+                                type="button"
+                                className="flex w-full items-center gap-1.5 rounded-lg px-3 py-1.5 text-left hover:bg-white/10"
+                                onClick={() => setReactionPickerOpen((prev) => !prev)}
+                            >
+                                <SmilePlus size={12} />
+                                React
+                            </button>
                             <div className="my-0.5 h-px bg-white/10" />
                             <button type="button" className="flex w-full rounded-lg px-3 py-1.5 text-left text-amber-200 hover:bg-white/10" onClick={() => { onDelete?.(message, 'me'); setMenuOpen(false); }}>
                                 Delete for me
@@ -261,13 +273,45 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                     ) : null}
                 </AnimatePresence>
 
+                <AnimatePresence>
+                    {reactionPickerOpen ? (
+                        <motion.div
+                            initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                            transition={{ duration: 0.15 }}
+                            className={clsx(
+                                'absolute bottom-full z-50 mb-1.5 overflow-hidden rounded-2xl border border-white/15 bg-slate-900/98 p-1 shadow-2xl',
+                                isCurrentUser ? 'right-0' : 'left-0'
+                            )}
+                        >
+                            <EmojiPicker
+                                autoFocusSearch={false}
+                                lazyLoadEmojis
+                                skinTonesDisabled
+                                previewConfig={{ showPreview: false }}
+                                width={300}
+                                height={360}
+                                onEmojiClick={(emojiData) => {
+                                    const emoji = String(emojiData?.emoji || '').trim();
+                                    if (!emoji) return;
+                                    onAddReaction?.(message, emoji);
+                                    setReactionPickerOpen(false);
+                                    setMenuOpen(false);
+                                }}
+                            />
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
+
                 <motion.div
                     whileHover={reduceMotion ? undefined : { scale: 1.02, y: -1 }}
                     whileTap={reduceMotion ? undefined : { scale: 0.985, y: 0 }}
-                    onDoubleClick={() => onAddReaction?.(message, '≡ƒæì')}
+                    onDoubleClick={() => onAddReaction?.(message, '👍')}
                     onContextMenu={(event) => {
                         event.preventDefault();
                         setMenuOpen(true);
+                        setReactionPickerOpen(false);
                     }}
                     onTouchStart={() => {
                         longPressTimerRef.current = window.setTimeout(() => {
@@ -298,7 +342,16 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                         type="button"
                         aria-label="Message actions"
                         title="Message actions"
-                        onClick={(e) => { e.stopPropagation(); setMenuOpen((p) => !p); }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpen((p) => {
+                                const next = !p;
+                                if (!next) {
+                                    setReactionPickerOpen(false);
+                                }
+                                return next;
+                            });
+                        }}
                         className="chat-bubble-action-trigger absolute top-1.5 right-1.5 z-20 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/45 text-white/90 shadow-md transition hover:bg-black/65"
                     >
                         <ChevronDown size={12} />

@@ -4,6 +4,12 @@
 
 The codebase is in a stable, build-passing state with updated architecture and synchronized docs.
 
+## Branding State
+
+- Product branding is now fully aligned to `BeyondStrings`.
+- Tagline is standardized as `See Conversations Smarter`.
+- Branding is centralized in `src/config/branding.js` to avoid hardcoded drift.
+
 ## Completed Milestones
 
 - Chat UX improvements:

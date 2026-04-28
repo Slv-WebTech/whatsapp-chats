@@ -1,4 +1,4 @@
-const DB_NAME = 'lensiq-offline-queue';
+const DB_NAME = 'beyondstrings-offline-queue';
 const STORE_NAME = 'messages';
 
 let openDbPromise = null;

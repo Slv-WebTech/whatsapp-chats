@@ -21,8 +21,9 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 
-const MESSAGE_LIMIT = 500;
-const MESSAGE_PAGE_SIZE = 50;
+// Keep realtime listeners focused on the recent window to reduce read costs.
+const MESSAGE_LIMIT = 30;
+const MESSAGE_PAGE_SIZE = 30;
 
 function ensureDb() {
     if (!db) {
@@ -168,7 +169,8 @@ async function deleteRefsInParallel(docRefs, chunkSize = 200) {
 
 export function subscribeToRoomMessages(roomId, onNext, onError, options) {
     ensureDb();
-    const q = query(roomMessagesRef(roomId, options), orderBy('createdAt', 'desc'), limit(MESSAGE_LIMIT));
+    const liveLimit = Number(options?.messageLimit) > 0 ? Number(options.messageLimit) : MESSAGE_LIMIT;
+    const q = query(roomMessagesRef(roomId, options), orderBy('createdAt', 'desc'), limit(liveLimit));
 
     return onSnapshot(
         q,
@@ -184,7 +186,7 @@ export function subscribeToRoomMessages(roomId, onNext, onError, options) {
             const oldestCursor = snapshot.docs[snapshot.docs.length - 1] || null;
             onNext(messages, {
                 oldestCursor,
-                hasMore: snapshot.size >= MESSAGE_LIMIT
+                hasMore: snapshot.size >= liveLimit
             });
         },
         onError
@@ -202,11 +204,13 @@ export async function fetchOlderRoomMessages(roomId, cursor, pageSize = MESSAGE_
         };
     }
 
+    const resolvedPageSize = Number(pageSize) > 0 ? Number(pageSize) : MESSAGE_PAGE_SIZE;
+
     const q = query(
         roomMessagesRef(roomId, options),
         orderBy('createdAt', 'desc'),
         startAfter(cursor),
-        limit(pageSize)
+        limit(resolvedPageSize)
     );
 
     const snapshot = await getDocs(q);
@@ -221,7 +225,7 @@ export async function fetchOlderRoomMessages(roomId, cursor, pageSize = MESSAGE_
     return {
         messages,
         oldestCursor: snapshot.docs[snapshot.docs.length - 1] || cursor,
-        hasMore: snapshot.size >= pageSize
+        hasMore: snapshot.size >= resolvedPageSize
     };
 }
 
@@ -265,9 +269,12 @@ export async function sendRoomMessage(roomId, payload, options) {
         throw new Error('Plain text messages are blocked. Encrypt before sending.');
     }
 
+    // DUAL WRITE (Phase 2 migration): shared message payload written to both schemas.
+    // The same auto-generated doc ID is reused in both collections so the
+    // clientId dedupe key and any future cross-reference remain consistent.
     const messageRef = doc(roomMessagesRef(roomId, options));
-    const batch = writeBatch(db);
-    batch.set(messageRef, {
+
+    const messagePayload = {
         text: safeText,
         sender: String(payload?.sender || '').trim() || null,
         senderEnc: safeSenderEncrypted || null,
@@ -286,21 +293,30 @@ export async function sendRoomMessage(roomId, payload, options) {
             [safeUid]: true
         },
         createdAt: serverTimestamp()
-    });
+    };
+
+    const roomActivityUpdate = {
+        updatedAt: serverTimestamp(),
+        lastMessageAt: serverTimestamp(),
+        lastMessageText: safeType === 'text' ? safeText.slice(0, 140) : `[${safeType}]`,
+        lastSenderId: safeUid,
+        lastSenderName: String(payload?.sender || '').trim() || ''
+    };
+
+    const batch = writeBatch(db);
+
+    // Primary write — legacy chats/ collection (read path until Phase 5)
+    batch.set(messageRef, messagePayload);
 
     if (collectionName === 'chats') {
-        batch.set(
-            doc(db, collectionName, safeChatId),
-            {
-                updatedAt: serverTimestamp(),
-                lastMessageAt: serverTimestamp(),
-                lastMessageText: safeType === 'text' ? safeText.slice(0, 140) : `[${safeType}]`,
-                lastSenderId: safeUid,
-                lastSenderName: String(payload?.sender || '').trim() || ''
-            },
-            { merge: true }
-        );
+        batch.set(doc(db, collectionName, safeChatId), roomActivityUpdate, { merge: true });
     }
+
+    // Secondary write — new rooms/ collection (dual-write, fire-and-forget safe)
+    // Uses the same document ID so backfill can skip already-present messages.
+    const newSchemaMessageRef = doc(db, 'rooms', safeChatId, 'messages', messageRef.id);
+    batch.set(newSchemaMessageRef, { ...messagePayload, _dualWrite: true }, { merge: false });
+    batch.set(doc(db, 'rooms', safeChatId), roomActivityUpdate, { merge: true });
 
     await batch.commit();
 }

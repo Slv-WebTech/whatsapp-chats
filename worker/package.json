@@ -1,0 +1,21 @@
+{
+  "name": "beyondstrings-worker",
+  "version": "1.0.0",
+  "description": "BeyondStrings background job worker — BullMQ + Neon PostgreSQL",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "bullmq": "^5.8.7",
+    "dotenv": "^16.4.7",
+    "firebase-admin": "^13.0.1",
+    "ioredis": "^5.3.2"
+  }
+}

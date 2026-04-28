@@ -154,23 +154,23 @@ function SettingsPanel({
                             <div className="mt-2 flex rounded-full p-1 surface-soft">
                                 <button
                                     type="button"
-                                    onClick={() => onChatModeChange?.('formal')}
-                                    className={`theme-pill ${chatMode === 'formal' ? 'theme-pill-active' : ''}`}
+                                    onClick={() => onChatModeChange?.('professional')}
+                                    className={`theme-pill ${chatMode === 'professional' ? 'theme-pill-active' : ''}`}
                                 >
                                     <Sparkles size={14} />
-                                    Formal
+                                    Professional
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => onChatModeChange?.('romantic')}
-                                    className={`theme-pill ${chatMode === 'romantic' ? 'theme-pill-active' : ''}`}
+                                    onClick={() => onChatModeChange?.('casual')}
+                                    className={`theme-pill ${chatMode === 'casual' ? 'theme-pill-active' : ''}`}
                                 >
                                     <Heart size={14} />
-                                    Romantic
+                                    Casual
                                 </button>
                             </div>
                             <p className="mt-2 text-xs text-[var(--text-muted)]">
-                                Formal uses neutral tones. Romantic applies softer love-focused styling.
+                                Professional uses neutral tones. Casual applies softer personal styling.
                             </p>
                         </div>
 

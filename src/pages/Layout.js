@@ -1,9 +1,7 @@
 import { Menu, ShieldCheck } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Sheet, SheetContent } from "../components/ui/sheet";
-import { BRAND } from "../config/branding";
-
-const BRAND_ICON_DARK = `${import.meta.env.BASE_URL}lensiq-logo-icons-dark.png`;
+import { BRAND, BRAND_ASSETS } from "../config/branding";
 
 export default function Layout({ sidebar, children, sidebarOpen, onSidebarOpenChange, title, rightAction, showAdmin, hideHeader = false }) {
   return (
@@ -24,7 +22,7 @@ export default function Layout({ sidebar, children, sidebarOpen, onSidebarOpenCh
                 <Menu size={18} />
               </Button>
               <div className="flex min-w-0 items-center gap-2">
-                <img src={BRAND_ICON_DARK} alt={BRAND.name} className="h-8 w-8 rounded-md object-contain" />
+                <img src={BRAND_ASSETS.iconDark} alt={BRAND.name} className="h-8 w-8 rounded-md object-contain" />
                 <div className="min-w-0">
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-500/90 [data-theme='dark']_&:text-emerald-300/80" style={{ color: 'var(--accent)' }}>{BRAND.name}</p>
                   <h1 className="truncate text-sm font-semibold tracking-tight text-[var(--text-main)] md:text-lg">{title}</h1>

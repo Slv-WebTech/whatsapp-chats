@@ -122,6 +122,7 @@ import {
     timestampToMillis,
     TYPING_STALE_WINDOW_MS
 } from '../features/chat/appRuntimeHelpers';
+import { getCachedProfiles, clearProfileCache } from '../utils/profileCache';
 
 const ChatInsights = lazy(() => import('../components/ChatInsights'));
 const SettingsPanel = lazy(() => import('../components/SettingsPanel'));
@@ -524,7 +525,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
             },
             tag: `room-${String(roomId || '').trim()}`,
             renotify: true,
-            icon: `${import.meta.env.BASE_URL}android-chrome-192x192.png`,
+            icon: `${import.meta.env.BASE_URL}web-app-manifest-192x192.png`,
             badge: `${import.meta.env.BASE_URL}favicon-32x32.png`
         };
 
@@ -678,7 +679,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
     const activeChatBackground =
         wallpaperPreference ||
         DEFAULT_CHAT_BACKGROUND[chatMode]?.[resolvedTheme] ||
-        DEFAULT_CHAT_BACKGROUND.formal.light;
+        DEFAULT_CHAT_BACKGROUND.professional.light;
 
     useEffect(() => {
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -2682,13 +2683,13 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
         if (!memberUids.length) return;
 
         let cancelled = false;
-        Promise.all(memberUids.map((uid) => loadUserProfile(uid).catch(() => null)))
-            .then((profiles) => {
+        getCachedProfiles(memberUids, loadUserProfile)
+            .then((profileMap) => {
                 if (cancelled) return;
                 const map = {};
-                profiles.forEach((profile) => {
-                    if (profile?.uid && profile?.username) {
-                        map[profile.uid] = String(profile.username).trim();
+                profileMap.forEach((profile, uid) => {
+                    if (profile?.username) {
+                        map[uid] = String(profile.username).trim();
                     }
                 });
                 setMemberProfilesMap(map);
@@ -3077,7 +3078,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                 pixelRatio: 2
             });
             const link = document.createElement('a');
-            link.download = `${String(BRAND.name || 'lensiq').toLowerCase()}-chat-${Date.now()}.png`;
+            link.download = `${String(BRAND.name || 'beyondstrings').toLowerCase()}-chat-${Date.now()}.png`;
             link.href = dataUrl;
             link.click();
         } catch (exportError) {

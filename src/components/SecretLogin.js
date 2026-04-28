@@ -3,20 +3,18 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { BRAND } from '../config/branding';
+import { BRAND, BRAND_ASSETS } from '../config/branding';
 
 const PROFESSIONAL_WALLPAPER = 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?fm=jpg&q=80&w=2000&auto=format&fit=crop';
 const PERSONAL_WALLPAPER = 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?fm=jpg&q=80&w=2000&auto=format&fit=crop';
-const BRAND_LOGO_DARK = `${import.meta.env.BASE_URL}lensiq-logo-dark.png`;
-const BRAND_LOGO_LIGHT = `${import.meta.env.BASE_URL}lensiq-logo-light.png`;
 
-function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, chatMode = 'romantic', onChatModeChange, onBackToHome }) {
+function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, chatMode = 'casual', onChatModeChange, onBackToHome }) {
     const [displayName, setDisplayName] = useState('');
     const [roomSecret, setRoomSecret] = useState('');
     const [localError, setLocalError] = useState('');
 
     const canSubmit = useMemo(() => displayName.trim().length >= 2 && roomSecret.length >= 6, [displayName, roomSecret]);
-    const isRomantic = chatMode === 'romantic';
+    const isCasual = chatMode === 'casual';
     const isDark = theme === 'dark';
 
     const submit = (event) => {
@@ -36,7 +34,7 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
             <motion.div
                 aria-hidden="true"
                 initial={{ opacity: 0.42, scale: 1.02 }}
-                animate={{ opacity: isRomantic ? [0.3, 0.42, 0.3] : [0.58, 0.72, 0.58], scale: [1.02, 1.06, 1.02] }}
+                animate={{ opacity: isCasual ? [0.3, 0.42, 0.3] : [0.58, 0.72, 0.58], scale: [1.02, 1.06, 1.02] }}
                 transition={{ duration: 16, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
                 className="absolute inset-0"
                 style={{
@@ -52,7 +50,7 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
             <motion.div
                 aria-hidden="true"
                 initial={{ opacity: 0.4, scale: 1.04 }}
-                animate={{ opacity: isRomantic ? [0.58, 0.74, 0.58] : [0.32, 0.46, 0.32], scale: [1.04, 1.08, 1.04] }}
+                animate={{ opacity: isCasual ? [0.58, 0.74, 0.58] : [0.32, 0.46, 0.32], scale: [1.04, 1.08, 1.04] }}
                 transition={{ duration: 18, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut', delay: 1.2 }}
                 className="absolute inset-0"
                 style={{
@@ -66,7 +64,7 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                 }}
             />
             <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 rotate-[18deg] bg-white/18 shadow-[0_0_30px_rgba(255,255,255,0.18)]" />
-            <div className={`absolute inset-0 opacity-80 ${isRomantic ? 'bg-[radial-gradient(circle_at_18%_16%,rgba(236,72,153,0.20),transparent_45%),radial-gradient(circle_at_82%_82%,rgba(251,113,133,0.18),transparent_40%)]' : 'bg-[radial-gradient(circle_at_20%_18%,rgba(14,165,233,0.18),transparent_45%),radial-gradient(circle_at_80%_84%,rgba(34,197,94,0.14),transparent_42%)]'}`} />
+            <div className={`absolute inset-0 opacity-80 ${isCasual ? 'bg-[radial-gradient(circle_at_18%_16%,rgba(236,72,153,0.20),transparent_45%),radial-gradient(circle_at_82%_82%,rgba(251,113,133,0.18),transparent_40%)]' : 'bg-[radial-gradient(circle_at_20%_18%,rgba(14,165,233,0.18),transparent_45%),radial-gradient(circle_at_80%_84%,rgba(34,197,94,0.14),transparent_42%)]'}`} />
             <div className={`absolute inset-0 ${isDark ? 'bg-[linear-gradient(120deg,rgba(2,6,23,0.68),rgba(15,23,42,0.35),rgba(2,6,23,0.64))]' : 'bg-[linear-gradient(120deg,rgba(255,255,255,0.28),rgba(255,255,255,0.08),rgba(248,250,252,0.22))]'}`} />
             <div className="pointer-events-none absolute inset-x-4 top-5 flex items-start justify-between text-[10px] font-semibold uppercase tracking-[0.24em] text-white/70 sm:inset-x-8 sm:text-xs">
                 <div className="rounded-full border border-white/14 bg-slate-950/22 px-3 py-1 backdrop-blur-sm">Professional</div>
@@ -89,7 +87,7 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                                     <ShieldCheck size={18} />
                                 </span>
                                 <img
-                                    src={isDark ? BRAND_LOGO_DARK : BRAND_LOGO_LIGHT}
+                                    src={isDark ? BRAND_ASSETS.logoDark : BRAND_ASSETS.logoLight}
                                     alt={BRAND.name}
                                     className="h-10 w-10 rounded-xl object-contain"
                                 />
@@ -127,13 +125,13 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                             <div className="flex items-center gap-1.5">
                                 <button
                                     type="button"
-                                    onClick={() => onChatModeChange?.('romantic')}
-                                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all ${chatMode === 'romantic' ? 'border-pink-400/40 bg-pink-500/18 text-pink-200 shadow-[0_10px_20px_rgba(244,114,182,0.22)]' : 'border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-white/10'}`}
+                                    onClick={() => onChatModeChange?.('casual')}
+                                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all ${chatMode === 'casual' ? 'border-pink-400/40 bg-pink-500/18 text-pink-200 shadow-[0_10px_20px_rgba(244,114,182,0.22)]' : 'border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-white/10'}`}
                                     aria-label="Personal mode"
                                 >
                                     <motion.span
-                                        animate={chatMode === 'romantic' ? { y: [0, -2, 0], scale: [1, 1.08, 1] } : { y: 0, scale: 1 }}
-                                        transition={chatMode === 'romantic' ? { duration: 2.4, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' } : { duration: 0.2 }}
+                                        animate={chatMode === 'casual' ? { y: [0, -2, 0], scale: [1, 1.08, 1] } : { y: 0, scale: 1 }}
+                                        transition={chatMode === 'casual' ? { duration: 2.4, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' } : { duration: 0.2 }}
                                         className="inline-flex"
                                     >
                                         <Heart size={15} />
@@ -141,20 +139,20 @@ function SecretLogin({ onLogin, errorMessage, theme = 'dark', onThemeChange, cha
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => onChatModeChange?.('formal')}
-                                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all ${chatMode === 'formal' ? 'border-sky-400/40 bg-sky-500/18 text-sky-200 shadow-[0_10px_20px_rgba(56,189,248,0.2)]' : 'border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-white/10'}`}
+                                    onClick={() => onChatModeChange?.('professional')}
+                                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all ${chatMode === 'professional' ? 'border-sky-400/40 bg-sky-500/18 text-sky-200 shadow-[0_10px_20px_rgba(56,189,248,0.2)]' : 'border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-white/10'}`}
                                     aria-label="Professional mode"
                                 >
                                     <motion.span
-                                        animate={chatMode === 'formal' ? { y: [0, -2, 0], scale: [1, 1.08, 1] } : { y: 0, scale: 1 }}
-                                        transition={chatMode === 'formal' ? { duration: 2.4, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' } : { duration: 0.2 }}
+                                        animate={chatMode === 'professional' ? { y: [0, -2, 0], scale: [1, 1.08, 1] } : { y: 0, scale: 1 }}
+                                        transition={chatMode === 'professional' ? { duration: 2.4, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' } : { duration: 0.2 }}
                                         className="inline-flex"
                                     >
                                         <BriefcaseBusiness size={15} />
                                     </motion.span>
                                 </button>
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${chatMode === 'romantic' ? 'bg-pink-500/12 text-pink-200' : 'bg-sky-500/12 text-sky-200'}`}>
-                                    {chatMode === 'romantic' ? 'Personal' : 'Professional'}
+                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${chatMode === 'casual' ? 'bg-pink-500/12 text-pink-200' : 'bg-sky-500/12 text-sky-200'}`}>
+                                    {chatMode === 'casual' ? 'Casual' : 'Professional'}
                                 </span>
                             </div>
                         </div>

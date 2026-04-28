@@ -17,7 +17,7 @@ function getFirebaseAdminConfig() {
     };
 }
 
-function getFirebaseAdminApp() {
+export function getFirebaseAdminApp() {
     if (getApps().length) {
         return getApps()[0];
     }
