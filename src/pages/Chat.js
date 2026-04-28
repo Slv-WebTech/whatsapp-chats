@@ -7,10 +7,12 @@ import Layout from "./Layout";
 import ChatListItem from "../components/ChatListItem";
 import SearchBar from "../components/SearchBar";
 import {
+  createGroupChat,
   createOrGetDirectChat,
   fetchChatsByIds,
   getDirectChatSecret,
-  joinGroupChatBySecret,
+  getGroupChatSecret,
+  joinGroupChatById,
   searchUsersByUsername,
   subscribeChat,
   subscribeUserChats,
@@ -21,6 +23,20 @@ import { selectAuthProfile, selectAuthUser, selectIsAdmin } from "../store/authS
 import { setAuthSession, setCurrentUser, setLastRoomId } from "../store/appSessionSlice";
 import { decryptMessage } from "../utils/encryption";
 import { setActiveChatRouteId } from "../utils/chatRouteState";
+
+function isLikelyGroupChat(chat) {
+  const id = String(chat?.id || "").trim().toLowerCase();
+  const type = String(chat?.type || "").trim().toLowerCase();
+  if (type === "group") {
+    return true;
+  }
+
+  if (id.startsWith("grp-") || /^[a-f0-9]{64}$/i.test(id)) {
+    return true;
+  }
+
+  return Boolean(chat?.ownerId || chat?.createdBy || chat?.memberRoles);
+}
 
 function ChatEngine({ chat, chatSecret, profile, dispatch, onBackHome, onOpenSidebar }) {
   const [ready, setReady] = useState(false);
@@ -37,7 +53,7 @@ function ChatEngine({ chat, chatSecret, profile, dispatch, onBackHome, onOpenSid
     return null;
   }
 
-  return <LegacyChatApp key={chat.id} onBackHome={onBackHome} onOpenSidebar={onOpenSidebar} initialChatTitle={chat?.displayTitle || chat?.name || ''} initialChatId={chat?.id || ''} />;
+  return <LegacyChatApp key={chat.id} onBackHome={onBackHome} onOpenSidebar={onOpenSidebar} initialChatTitle={chat?.displayTitle || chat?.name || ''} initialChatId={chat?.id || ''} initialChatType={chat?.type || ''} />;
 }
 
 function resolveTitle(chat, currentUserId) {
@@ -45,7 +61,7 @@ function resolveTitle(chat, currentUserId) {
     return "Chat";
   }
 
-  if (chat.type === "group") {
+  if (isLikelyGroupChat(chat)) {
     return chat.name || `Group ${chat.id.slice(0, 8)}`;
   }
 
@@ -98,7 +114,15 @@ function buildLastMessagePreview(chat) {
   }
 
   if (raw.startsWith('U2FsdGVkX1')) {
-    if (chat?.type !== 'group' && chat?.id) {
+    if (isLikelyGroupChat(chat) && chat?.id) {
+      try {
+        return decryptMessage(raw, getGroupChatSecret(chat.id));
+      } catch {
+        return 'Encrypted message';
+      }
+    }
+
+    if (chat?.id) {
       try {
         return decryptMessage(raw, getDirectChatSecret(chat.id));
       } catch {
@@ -123,7 +147,6 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
   const [importedChats, setImportedChats] = useState([]);
   const [userQuery, setUserQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [groupSecrets, setGroupSecrets] = useState({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -321,12 +344,12 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
       return "";
     }
 
-    if (chat.type === "group") {
-      return groupSecrets[chat.id] || "";
+    if (isLikelyGroupChat(chat)) {
+      return getGroupChatSecret(chat.id);
     }
 
     return getDirectChatSecret(chat.id);
-  }, [chat, groupSecrets]);
+  }, [chat]);
 
   const handleCreateDirectChat = async (targetUser) => {
     if (!profile || !authUser?.uid) {
@@ -338,13 +361,26 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
     setSidebarOpen(false);
   };
 
-  const handleJoinGroup = async (secret) => {
+  const handleCreateGroup = async (groupName) => {
     if (!profile || !authUser?.uid) {
       return;
     }
 
-    const result = await joinGroupChatBySecret({ ...profile, uid: authUser.uid }, secret);
-    setGroupSecrets((prev) => ({ ...prev, [result.chatId]: result.secret }));
+    const result = await createGroupChat({ ...profile, uid: authUser.uid }, { name: groupName });
+    navigate(`/chat/${encodeURIComponent(result.chatId)}`);
+    setSidebarOpen(false);
+  };
+
+  const handleJoinGroup = async (groupId) => {
+    if (!profile || !authUser?.uid) {
+      return;
+    }
+
+    const result = await joinGroupChatById({ ...profile, uid: authUser.uid }, groupId);
+    if (result?.status === 'pending') {
+      setError('Join request submitted. Group owner/admin approval is required.');
+      return;
+    }
     navigate(`/chat/${encodeURIComponent(result.chatId)}`);
     setSidebarOpen(false);
   };
@@ -371,8 +407,10 @@ export default function ChatPage({ chatId, navigate, onLogout }) {
         onUserQueryChange={setUserQuery}
         userResults={searchResults}
         onCreateDirectChat={handleCreateDirectChat}
+        onCreateGroup={handleCreateGroup}
         onJoinGroup={handleJoinGroup}
         loading={loading}
+        showGroupActions={false}
       />
 
       {/* Chat List - Expandable */}

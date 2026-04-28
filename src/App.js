@@ -1,4 +1,4 @@
-import { useLegacyChatRuntime } from './hooks/useLegacyChatRuntime';
+import { useLegacyChatRuntime } from './features/chat/hooks/useLegacyChatRuntime';
 
 function App(props) {
     return useLegacyChatRuntime(props);

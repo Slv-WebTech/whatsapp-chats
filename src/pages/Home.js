@@ -1,4 +1,4 @@
-import { LogOut, Shield, Upload, UserCircle2 } from "lucide-react";
+import { LogOut, MessageCircle, Shield, Upload, UserCircle2 } from "lucide-react";
 import HelpModal from "../components/HelpModal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -7,7 +7,7 @@ import SearchBar from "../components/SearchBar";
 import PremiumUsernameTag from "../components/PremiumUsernameTag";
 import { Button } from "../components/ui/button";
 import Layout from "./Layout";
-import { createOrGetDirectChat, fetchChatsByIds, getDirectChatSecret, joinGroupChatBySecret, searchUsersByUsername, subscribeChat, subscribeUserChats } from "../firebase/socialService";
+import { createGroupChat, createOrGetDirectChat, fetchChatsByIds, getDirectChatSecret, getGroupChatSecret, joinGroupChatById, searchUsersByUsername, subscribeChat, subscribeUserChats } from "../firebase/socialService";
 import { parseWhatsAppFileInChunks } from "../utils/parser";
 import { listImportedChats, saveImportedChat } from "../utils/importedChatStore";
 import { selectAuthProfile, selectAuthUser, selectIsAdmin } from "../store/authSlice";
@@ -15,8 +15,22 @@ import { selectAvatarPreferences } from "../store/appSessionSlice";
 import { decryptMessage } from "../utils/encryption";
 import { setActiveChatRouteId } from "../utils/chatRouteState";
 
+function isLikelyGroupChat(chat) {
+  const id = String(chat?.id || "").trim().toLowerCase();
+  const type = String(chat?.type || "").trim().toLowerCase();
+  if (type === "group") {
+    return true;
+  }
+
+  if (id.startsWith("grp-") || /^[a-f0-9]{64}$/i.test(id)) {
+    return true;
+  }
+
+  return Boolean(chat?.ownerId || chat?.createdBy || chat?.memberRoles);
+}
+
 function buildDisplayTitle(chat, currentUserId) {
-  if (chat.type === "group") {
+  if (isLikelyGroupChat(chat)) {
     return chat.name || `Group ${chat.id.slice(0, 8)}`;
   }
 
@@ -69,7 +83,15 @@ function buildLastMessagePreview(chat) {
   }
 
   if (raw.startsWith('U2FsdGVkX1')) {
-    if (chat?.type !== 'group' && chat?.id) {
+    if (isLikelyGroupChat(chat) && chat?.id) {
+      try {
+        return decryptMessage(raw, getGroupChatSecret(chat.id));
+      } catch {
+        return 'Encrypted message';
+      }
+    }
+
+    if (chat?.id) {
       try {
         return decryptMessage(raw, getDirectChatSecret(chat.id));
       } catch {
@@ -100,6 +122,31 @@ export default function Home({ navigate, onLogout }) {
   const [isImporting, setIsImporting] = useState(false);
   const [importHint, setImportHint] = useState("");
   const importInputRef = useRef(null);
+
+  function extractGroupId(raw) {
+    const s = String(raw || '').trim();
+    try {
+      const url = new URL(s);
+      const fromParam = url.searchParams.get('join');
+      if (fromParam) return fromParam.trim();
+    } catch {
+      // not a URL, use as-is
+    }
+    return s;
+  }
+
+  // Auto-join group when opened via invite link (?join=<groupId>)
+  useEffect(() => {
+    if (!authUser?.uid || !profile) return;
+    const params = new URLSearchParams(window.location.search);
+    const joinId = params.get('join');
+    if (!joinId) return;
+    // Remove param from URL without reload
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+    handleJoinGroup(joinId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.uid, profile]);
 
   useEffect(() => {
     if (!authUser?.uid) {
@@ -240,7 +287,11 @@ export default function Home({ navigate, onLogout }) {
   const activeChatId = useMemo(() => "", []);
 
   const mergedChats = useMemo(() => {
-    const regular = chats.map((entry) => ({ ...entry, isImported: false, type: entry.type || '1:1' }));
+    const regular = chats.map((entry) => ({
+      ...entry,
+      isImported: false,
+      type: entry.type || (isLikelyGroupChat(entry) ? 'group' : '1:1')
+    }));
     const imported = importedChats.map((entry) => ({
       ...entry,
       isImported: true,
@@ -279,7 +330,7 @@ export default function Home({ navigate, onLogout }) {
     }
   };
 
-  const handleJoinGroup = async (secret) => {
+  const handleCreateGroup = async (groupName) => {
     if (!profile || !authUser?.uid) {
       return;
     }
@@ -287,11 +338,45 @@ export default function Home({ navigate, onLogout }) {
     setLoading(true);
     setError("");
     try {
-      const result = await joinGroupChatBySecret({ ...profile, uid: authUser.uid }, secret);
+      const result = await createGroupChat({ ...profile, uid: authUser.uid }, { name: groupName });
+      setActiveChatRouteId(result.chatId);
+      navigate('/chat');
+    } catch (createError) {
+      setError(createError?.message || "Unable to create group.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinGroup = async (groupId) => {
+    if (!profile || !authUser?.uid) {
+      return;
+    }
+
+    const resolvedId = extractGroupId(groupId);
+    if (!resolvedId) {
+      setError('Please enter a valid group ID or invite link.');
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const result = await joinGroupChatById({ ...profile, uid: authUser.uid }, resolvedId);
+      if (result?.status === 'pending') {
+        setError('Join request submitted. Group owner/admin approval is required.');
+        return;
+      }
       setActiveChatRouteId(result.chatId);
       navigate('/chat');
     } catch (joinError) {
-      setError(joinError?.message || "Unable to join group.");
+      const rawMessage = String(joinError?.message || '').trim();
+      const normalizedMessage = rawMessage.toLowerCase();
+      if (normalizedMessage.includes('internal assertion failed')) {
+        setError('Unable to submit join request right now. Please retry in a few seconds.');
+      } else {
+        setError(rawMessage || "Unable to join group.");
+      }
     } finally {
       setLoading(false);
     }
@@ -363,6 +448,7 @@ export default function Home({ navigate, onLogout }) {
         onUserQueryChange={setUserQuery}
         userResults={searchResults}
         onCreateDirectChat={handleCreateDirectChat}
+        onCreateGroup={handleCreateGroup}
         onJoinGroup={handleJoinGroup}
         loading={loading}
       />
@@ -386,8 +472,19 @@ export default function Home({ navigate, onLogout }) {
             />
           ))
         ) : (
-          <div className="rounded-[1.1rem] border border-dashed border-[var(--border-soft)] bg-[var(--panel-soft)] p-3 text-xs text-[var(--text-muted)]">
-            No chats yet. Start a chat or import one.
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-[var(--border-soft)] bg-[var(--panel-soft)] px-4 py-10 text-center">
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)]">
+              <MessageCircle size={26} className="text-[var(--accent)]" />
+            </span>
+            <div>
+              <p className="font-semibold text-[var(--text-main)]">No conversations yet</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">Search for a username above to start a direct chat, or import a WhatsApp export.</p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={() => importInputRef.current?.click()} className="rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-4 py-1.5 text-xs font-semibold text-[var(--text-muted)]">
+                Import chat
+              </button>
+            </div>
           </div>
         )}
       </div>

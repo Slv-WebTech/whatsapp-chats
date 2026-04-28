@@ -6,15 +6,20 @@ import { Virtuoso } from 'react-virtuoso';
 import { MessageCircleMore, X } from 'lucide-react';
 import ChatBubble from '../components/ChatBubble';
 import ChatHeader from '../components/ChatHeader';
+import JoinRequestsPanel from '../components/JoinRequestsPanel';
+import GroupSettingsPanel from '../components/GroupSettingsPanel';
 import LiveComposer from '../components/LiveComposer';
 import ReplayControls from '../components/ReplayControls';
 import SecretLogin from '../components/SecretLogin';
 import AISidePanel from '../components/AISidePanel';
 import { Button } from '../components/ui/button';
+import { exportChatAsText, exportChatAsPDF } from '../utils/exportChat';
+import { trackEvent } from '../utils/metrics';
 import { Card, CardContent } from '../components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
 import {
     addMessageReaction,
+    bookmarkRoomMessage,
     clearRoomMessages,
     deleteRoomMessage,
     ensureChatDocument,
@@ -23,6 +28,7 @@ import {
     hideRoomMessageForUser,
     markMessageDelivered,
     markMessageRead,
+    pinRoomMessage,
     scrubLegacyRoomMetadata,
     sanitizeRoomId,
     sendRoomMessage,
@@ -70,7 +76,18 @@ import {
     setThemePreference,
     setUserAvatar
 } from '../store/appSessionSlice';
-import { selectAuthProfile, updateUserProfile } from '../store/authSlice';
+import { selectAuthProfile, selectIsAdmin, updateUserProfile } from '../store/authSlice';
+import {
+    approveJoinRequest,
+    deleteGroupForAll,
+    leaveGroupChat,
+    loadUserProfile,
+    rejectJoinRequest,
+    removeGroupMember,
+    subscribeChat,
+    subscribeGroupJoinRequests,
+    updateGroupSettings
+} from '../firebase/socialService';
 import { persistor } from '../store/store';
 import {
     clearOfflineMessages,
@@ -110,7 +127,7 @@ const ChatInsights = lazy(() => import('../components/ChatInsights'));
 const SettingsPanel = lazy(() => import('../components/SettingsPanel'));
 const MESSAGE_TONE_URL = import.meta.env.VITE_MESSAGE_TONE_URL || `${import.meta.env.BASE_URL}notification.mp3`;
 
-export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTitle = '', initialChatId = '' }) {
+export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTitle = '', initialChatId = '', initialChatType = '' }) {
     const VIRTUALIZE_THRESHOLD = 350;
     const firebaseReady = isFirebaseConfigured();
     const dispatch = useDispatch();
@@ -123,6 +140,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
     const customBackgroundUrl = useSelector(selectCustomBackgroundUrl);
     const avatars = useSelector(selectAvatarPreferences);
     const authProfile = useSelector(selectAuthProfile);
+    const isAdminUser = useSelector(selectIsAdmin);
     const [authUid, setAuthUid] = useState('');
     const [authReady, setAuthReady] = useState(() => !firebaseReady);
     const [prefersDark, setPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -237,6 +255,26 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
     const authSecret = authSession?.secret || '';
     const isLoggedIn = Boolean(authSession?.displayName && authSession?.secret);
+    const [joinRequests, setJoinRequests] = useState([]);
+    const [showJoinRequests, setShowJoinRequests] = useState(false);
+    const [groupOwnerId, setGroupOwnerId] = useState('');
+    const [groupChatData, setGroupChatData] = useState(null);
+    const [showGroupSettings, setShowGroupSettings] = useState(false);
+    const [memberProfilesMap, setMemberProfilesMap] = useState({});
+
+    const isGroupChat = useMemo(() => {
+        const normalizedType = String(initialChatType || '').trim().toLowerCase();
+        if (normalizedType === 'group') {
+            return true;
+        }
+
+        const normalizedRoomId = String(roomId || initialChatId || '').trim().toLowerCase();
+        if (normalizedRoomId.startsWith('grp-')) {
+            return true;
+        }
+
+        return /^[a-f0-9]{64}$/i.test(normalizedRoomId);
+    }, [initialChatId, initialChatType, roomId]);
     const encryptedCurrentUserName = useMemo(() => {
         const safeCurrentUser = String(currentUser || '').trim();
         if (!safeCurrentUser || !authSecret) {
@@ -1499,7 +1537,42 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
     const preferredChatTitle = String(initialChatTitle || '').trim();
     const hasUsableInitialTitle = Boolean(preferredChatTitle) && !['chat', 'direct chat', 'untitled chat'].includes(preferredChatTitle.toLowerCase());
     const otherUser = otherParticipantNames[0] || (hasUsableInitialTitle ? preferredChatTitle : '') || 'Waiting for others';
-    const contactName = otherUser;
+    const groupTitle = isGroupChat
+        ? (String(groupChatData?.name || '').trim() || (hasUsableInitialTitle ? preferredChatTitle : '') || 'Group chat')
+        : '';
+    const contactName = isGroupChat ? groupTitle : otherUser;
+    const groupParticipantNames = useMemo(() => {
+        if (!isGroupChat) {
+            return [];
+        }
+
+        const names = [];
+        const seen = new Set();
+        const addName = (value) => {
+            const safeName = String(value || '').trim();
+            const normalizedName = safeName.toLowerCase();
+            if (!safeName || seen.has(normalizedName)) {
+                return;
+            }
+            seen.add(normalizedName);
+            names.push(safeName);
+        };
+
+        addName(currentUser || authSession?.displayName || 'You');
+
+        const memberUsernames = groupChatData?.memberUsernames || {};
+        Object.values(memberUsernames).forEach((name) => addName(name));
+
+        otherParticipantNames.forEach((name) => addName(name));
+        users.forEach((name) => addName(name));
+
+        Object.entries(presenceUsers).forEach(([uid, entry]) => {
+            const decodedName = decryptDisplayNameSafely(entry?.encryptedDisplayName, authSecret) || pseudonymFromUid(uid);
+            addName(decodedName);
+        });
+
+        return names;
+    }, [isGroupChat, currentUser, authSession?.displayName, groupChatData?.memberUsernames, otherParticipantNames, users, presenceUsers, authSecret]);
     const contactMessages = useMemo(
         () => groupedMessages.filter((message) => message.sender === contactName),
         [groupedMessages, contactName]
@@ -1540,6 +1613,25 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
             )
         );
 
+        if (isGroupChat) {
+            const displayNames = groupParticipantNames.filter(Boolean);
+            const onlineDisplayNames = onlineNames.filter(Boolean);
+            const previewLimit = 6;
+            const visibleNames = onlineDisplayNames.slice(0, previewLimit);
+            const remainingCount = Math.max(0, onlineDisplayNames.length - visibleNames.length);
+            const statusLine = visibleNames.length
+                ? `${visibleNames.join(', ')}${remainingCount > 0 ? `, +${remainingCount}` : ''}`
+                : 'No members online';
+
+            return {
+                isOnline: onlineDisplayNames.length > 0,
+                lastSeenLabel: '',
+                statusLine,
+                messageCount: displayNames.length,
+                activeDayCount: displayNames.length
+            };
+        }
+
         if (!contactMessages.length && !livePresence) {
             return {
                 isOnline: false,
@@ -1579,7 +1671,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
             messageCount: contactMessages.length,
             activeDayCount: activeDays.size
         };
-    }, [contactMessages, presenceUsers, contactName, otherUser, authUid, authSecret, currentUser, authSession?.displayName]);
+    }, [contactMessages, presenceUsers, contactName, otherUser, authUid, authSecret, currentUser, authSession?.displayName, isGroupChat, groupParticipantNames]);
 
     const typingIndicatorText = useMemo(() => {
         const selfNames = new Set(
@@ -2199,6 +2291,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
             await ensureChatDocument(roomId, authUid);
             await sendRoomMessage(roomId, queuedMessage.payload);
+            trackEvent('message_sent', { chatType: isGroupChat ? 'group' : 'direct' });
 
             setDraftMessage('');
             setReplyToMessage(null);
@@ -2414,6 +2507,260 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
         }
     }, []);
 
+    const handleCopyGroupInviteCode = useCallback(async () => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!safeRoomId || !isGroupChat) {
+            return;
+        }
+
+        try {
+            await window.navigator?.clipboard?.writeText(safeRoomId);
+            setStatusMessage('Group ID copied to clipboard. Share it so others can request access.');
+        } catch {
+            setStatusMessage('Unable to copy the group ID right now.');
+        }
+    }, [isGroupChat, roomId]);
+
+    const groupMembersForSettings = useMemo(() => {
+        if (!isGroupChat) {
+            return [];
+        }
+
+        const members = Array.isArray(groupChatData?.members) ? groupChatData.members : [];
+        const usernames = groupChatData?.memberUsernames || {};
+        const roles = groupChatData?.memberRoles || {};
+        const ownerId = String(groupChatData?.ownerId || '').trim();
+
+        return members.map((uid) => {
+            const safeUid = String(uid || '').trim();
+            // Priority: live Firestore user profile → memberUsernames map → pseudonym
+            const username = memberProfilesMap[safeUid]
+                || String(usernames?.[safeUid] || '').trim()
+                || pseudonymFromUid(safeUid);
+            const role = safeUid === ownerId ? 'owner' : (String(roles?.[safeUid] || 'member').trim().toLowerCase() || 'member');
+            return {
+                uid: safeUid,
+                username,
+                role,
+                avatar: avatars[username] || defaultAvatarMap[username] || `https://i.pravatar.cc/48?u=${safeUid}`
+            };
+        });
+    }, [isGroupChat, groupChatData?.members, groupChatData?.memberUsernames, groupChatData?.memberRoles, groupChatData?.ownerId, avatars, defaultAvatarMap, memberProfilesMap]);
+
+    const handleOpenGroupSettings = useCallback(() => {
+        if (!isGroupChat) {
+            return;
+        }
+        setShowGroupSettings(true);
+    }, [isGroupChat]);
+
+    const handleSaveGroupSettings = useCallback(async (updates) => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!safeRoomId || !isGroupChat) {
+            return;
+        }
+
+        try {
+            await updateGroupSettings({
+                uid: authUid,
+                role: isAdminUser ? 'admin' : 'user'
+            }, safeRoomId, updates);
+            setStatusMessage('Group settings updated.');
+        } catch (err) {
+            setStatusMessage(err?.message || 'Unable to update group settings.');
+        }
+    }, [authUid, isAdminUser, isGroupChat, roomId]);
+
+    const handleRemoveGroupMember = useCallback(async (member) => {
+        const safeRoomId = String(roomId || '').trim();
+        const safeMemberUid = String(member?.uid || '').trim();
+        if (!safeRoomId || !safeMemberUid || !isGroupChat) {
+            return;
+        }
+
+        const confirmed = window.confirm(`Remove ${member?.username || 'this user'} from the group?`);
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            await removeGroupMember({
+                uid: authUid,
+                role: isAdminUser ? 'admin' : 'user'
+            }, safeRoomId, safeMemberUid);
+            setStatusMessage(`${member?.username || 'Member'} removed from the group.`);
+        } catch (err) {
+            setStatusMessage(err?.message || 'Unable to remove member.');
+        }
+    }, [authUid, isAdminUser, isGroupChat, roomId]);
+
+    const handleDeleteGroup = useCallback(async () => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!safeRoomId || !isGroupChat) {
+            return;
+        }
+
+        try {
+            await deleteGroupForAll({
+                uid: authUid,
+                role: isAdminUser ? 'admin' : 'user'
+            }, safeRoomId);
+            setShowGroupSettings(false);
+            setStatusMessage('Group deleted successfully.');
+            onBackHome?.();
+        } catch (err) {
+            setStatusMessage(err?.message || 'Unable to delete group.');
+        }
+    }, [authUid, isAdminUser, isGroupChat, onBackHome, roomId]);
+
+    const canLeaveGroup = useMemo(() => {
+        if (!isGroupChat || !authUid) {
+            return false;
+        }
+
+        const ownerId = String(groupChatData?.ownerId || '').trim();
+        return Boolean(ownerId) && ownerId !== String(authUid).trim();
+    }, [isGroupChat, authUid, groupChatData?.ownerId]);
+
+    const handleLeaveGroup = useCallback(async () => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!safeRoomId || !isGroupChat || !authUid) {
+            return;
+        }
+
+        try {
+            await leaveGroupChat(
+                {
+                    uid: authUid,
+                    username: String(currentUser || authProfile?.username || 'Member').trim(),
+                    role: isAdminUser ? 'admin' : 'user'
+                },
+                safeRoomId
+            );
+            setShowGroupSettings(false);
+            setStatusMessage('You left the group.');
+            onBackHome?.();
+        } catch (err) {
+            setStatusMessage(err?.message || 'Unable to leave group.');
+        }
+    }, [authUid, authProfile?.username, currentUser, isAdminUser, isGroupChat, onBackHome, roomId]);
+
+    const handleCopyInviteLink = useCallback((chatId) => {
+        const link = `${window.location.origin}/?join=${String(chatId || '').trim()}`;
+        navigator.clipboard.writeText(link).then(() => {
+            setStatusMessage('Invite link copied to clipboard!');
+        }).catch(() => {
+            setStatusMessage('Unable to copy link. Please copy manually: ' + link);
+        });
+    }, []);
+
+    const syncHealth = useMemo(() => {
+        if (!isOnline) {
+            return { label: 'Offline', tone: 'warn' };
+        }
+
+        if (liveLoading) {
+            return { label: 'Syncing', tone: 'info' };
+        }
+
+        if (firebaseError) {
+            return { label: 'Degraded', tone: 'bad' };
+        }
+
+        return { label: 'Live', tone: 'good' };
+    }, [isOnline, liveLoading, firebaseError]);
+
+    // Fetch live user profiles for all group members so we always show correct usernames
+    useEffect(() => {
+        if (!isGroupChat) {
+            setMemberProfilesMap({});
+            return;
+        }
+        const memberUids = Array.isArray(groupChatData?.members)
+            ? groupChatData.members.map((uid) => String(uid || '').trim()).filter(Boolean)
+            : [];
+        if (!memberUids.length) return;
+
+        let cancelled = false;
+        Promise.all(memberUids.map((uid) => loadUserProfile(uid).catch(() => null)))
+            .then((profiles) => {
+                if (cancelled) return;
+                const map = {};
+                profiles.forEach((profile) => {
+                    if (profile?.uid && profile?.username) {
+                        map[profile.uid] = String(profile.username).trim();
+                    }
+                });
+                setMemberProfilesMap(map);
+            });
+        return () => { cancelled = true; };
+    }, [isGroupChat, groupChatData?.members]);
+
+    // Determine if the current user can moderate this group (owner or platform admin)
+    const isGroupOwnerOrAdmin = useMemo(() => {
+        if (!isGroupChat || !authUid) return false;
+        if (isAdminUser) return true;
+        return Boolean(groupOwnerId && groupOwnerId === authUid);
+    }, [isGroupChat, authUid, isAdminUser, groupOwnerId]);
+
+    // Subscribe to the group chat document to get real-time ownerId
+    useEffect(() => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!isGroupChat || !safeRoomId) {
+            setGroupChatData(null);
+            setGroupOwnerId('');
+            return;
+        }
+
+        const unsub = subscribeChat(safeRoomId, (chatData) => {
+            setGroupChatData(chatData || null);
+            setGroupOwnerId(String(chatData?.ownerId || '').trim());
+        }, () => { });
+        return () => unsub?.();
+    }, [isGroupChat, roomId]);
+
+    // Subscribe to pending join requests for group owners/admins
+    useEffect(() => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!isGroupChat || !safeRoomId || !authUid) return;
+
+        const unsub = subscribeGroupJoinRequests(
+            safeRoomId,
+            (requests) => setJoinRequests(requests),
+            () => setJoinRequests([])
+        );
+        return () => unsub?.();
+    }, [isGroupChat, roomId, authUid]);
+
+    const handleApproveJoinRequest = useCallback(async (req) => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!safeRoomId || !req?.id) return;
+        try {
+            await approveJoinRequest(
+                { uid: authUid, username: String(currentUser || '').trim() },
+                safeRoomId,
+                req.id,
+                req.username
+            );
+        } catch (err) {
+            setStatusMessage(err?.message || 'Unable to approve request.');
+        }
+    }, [authUid, currentUser, roomId]);
+
+    const handleRejectJoinRequest = useCallback(async (req) => {
+        const safeRoomId = String(roomId || '').trim();
+        if (!safeRoomId || !req?.id) return;
+        try {
+            await rejectJoinRequest(
+                { uid: authUid, username: String(currentUser || '').trim() },
+                safeRoomId,
+                req.id
+            );
+        } catch (err) {
+            setStatusMessage(err?.message || 'Unable to reject request.');
+        }
+    }, [authUid, currentUser, roomId]);
+
     const handleForwardMessage = useCallback((message) => {
         const safeText = String(message?.message || '').trim();
         if (!safeText) {
@@ -2459,6 +2806,24 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
         setDeletedForMeIds((prev) => Array.from(new Set([...prev, message.id])));
         setStatusMessage('Message deleted for you.');
+    }, [authUid, firebaseReady, roomId]);
+
+    const handlePinMessage = useCallback(async (message, pinned) => {
+        if (!message?.firestoreId || !firebaseReady) return;
+        try {
+            await pinRoomMessage(roomId, message.firestoreId, pinned);
+        } catch {
+            setFirebaseError('Could not pin message.');
+        }
+    }, [firebaseReady, roomId]);
+
+    const handleBookmarkMessage = useCallback(async (message, bookmarked) => {
+        if (!message?.firestoreId || !firebaseReady || !authUid) return;
+        try {
+            await bookmarkRoomMessage(roomId, message.firestoreId, authUid, bookmarked);
+        } catch {
+            setFirebaseError('Could not bookmark message.');
+        }
     }, [authUid, firebaseReady, roomId]);
 
     const handleAvatarUpload = (user, file) => {
@@ -2720,7 +3085,18 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
         }
     };
 
+    const handleExportText = useCallback(() => {
+        trackEvent('export_text');
+        exportChatAsText(messages, initialChatTitle || roomId || 'chat');
+    }, [messages, initialChatTitle, roomId]);
+
+    const handleExportPDF = useCallback(() => {
+        trackEvent('export_pdf');
+        exportChatAsPDF(messages, initialChatTitle || roomId || 'chat');
+    }, [messages, initialChatTitle, roomId]);
+
     const handleSummarize = useCallback(async () => {
+        trackEvent('ai_summarize');
         setSummaryLoading(true);
         setError('');
         setSummaryProvider('');
@@ -2824,8 +3200,12 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                     <div className="chat-special-overlay pointer-events-none absolute inset-0 z-[1]" />
                     <div ref={chatCaptureRef} className="chat-shell-stage flex h-full min-h-0 flex-col bg-[var(--chat-shell)]">
                         <ChatHeader
-                            title={contactName}
-                            avatar={avatars[contactName] || avatars[otherUser] || defaultAvatarMap[contactName] || defaultAvatarMap[otherUser] || DEFAULT_HEADER_CONTACT_IMAGE}
+                            title={isGroupChat ? groupTitle : contactName}
+                            avatar={isGroupChat ? (groupChatData?.photoUrl || DEFAULT_HEADER_CONTACT_IMAGE) : (avatars[contactName] || avatars[otherUser] || defaultAvatarMap[contactName] || defaultAvatarMap[otherUser] || DEFAULT_HEADER_CONTACT_IMAGE)}
+                            isGroupChat={isGroupChat}
+                            onTitleClick={isGroupChat ? handleOpenGroupSettings : undefined}
+                            syncHealthLabel={syncHealth.label}
+                            syncHealthTone={syncHealth.tone}
                             theme={resolvedTheme}
                             onThemeChange={(nextTheme) => handleThemeChange(nextTheme)}
                             contactMeta={contactMeta}
@@ -2845,6 +3225,13 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                                 setSettingsOpen(true);
                             }}
                             onExport={handleExport}
+                            onExportText={handleExportText}
+                            onExportPDF={handleExportPDF}
+                            canCopyInviteCode={isGroupChat}
+                            onCopyInviteCode={handleCopyGroupInviteCode}
+                            canManageJoinRequests={isGroupChat && isGroupOwnerOrAdmin}
+                            pendingJoinRequestCount={joinRequests.length}
+                            onOpenJoinRequests={() => setShowJoinRequests(true)}
                             showSearch={showSearch}
                             onToggleSearch={() => setShowSearch((prev) => !prev)}
                             showTimeline={showTimeline}
@@ -3066,6 +3453,8 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                                                                     onCopy={handleCopyMessage}
                                                                     onForward={handleForwardMessage}
                                                                     onDelete={handleDeleteMessage}
+                                                                    onPin={handlePinMessage}
+                                                                    onBookmark={handleBookmarkMessage}
                                                                     messageRef={(node) => {
                                                                         if (node) {
                                                                             messageRefs.current[message.id] = node;
@@ -3112,6 +3501,8 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                                                                     onCopy={handleCopyMessage}
                                                                     onForward={handleForwardMessage}
                                                                     onDelete={handleDeleteMessage}
+                                                                    onPin={handlePinMessage}
+                                                                    onBookmark={handleBookmarkMessage}
                                                                     messageRef={(node) => {
                                                                         if (node) {
                                                                             messageRefs.current[message.id] = node;
@@ -3435,6 +3826,35 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                     </SheetContent>
                 </Sheet>
             </div>
+            {showJoinRequests ? (
+                <JoinRequestsPanel
+                    requests={joinRequests}
+                    onApprove={handleApproveJoinRequest}
+                    onReject={handleRejectJoinRequest}
+                    onClose={() => setShowJoinRequests(false)}
+                />
+            ) : null}
+            {showGroupSettings ? (
+                <GroupSettingsPanel
+                    open={showGroupSettings}
+                    group={{
+                        name: groupTitle,
+                        description: groupChatData?.description || '',
+                        photoUrl: groupChatData?.photoUrl || ''
+                    }}
+                    groupId={roomId}
+                    members={groupMembersForSettings}
+                    canManage={isGroupOwnerOrAdmin}
+                    canLeave={canLeaveGroup}
+                    currentUserId={authUid}
+                    onClose={() => setShowGroupSettings(false)}
+                    onSave={handleSaveGroupSettings}
+                    onRemoveMember={handleRemoveGroupMember}
+                    onDeleteGroup={handleDeleteGroup}
+                    onLeaveGroup={handleLeaveGroup}
+                    onCopyInviteLink={handleCopyInviteLink}
+                />
+            ) : null}
         </div>
     );
 }

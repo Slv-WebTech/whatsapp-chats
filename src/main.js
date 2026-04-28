@@ -2,11 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
-import RootApp from './RootApp';
-import AppErrorBoundary from './components/AppErrorBoundary';
+import RootApp from './app/router/RootApp';
+import AppErrorBoundary from './shared/components/layout/AppErrorBoundary';
 import './index.css';
-import { persistor, store } from './store/store';
-import { BRAND } from './config/branding';
+import { persistor, store } from './app/store/store';
+import { BRAND } from './shared/config/branding';
 import { BRAND_SW_CACHE_PREFIX } from './config/brandTokens';
 
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
@@ -227,12 +227,16 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     });
 }
 
+import { ToastProvider } from './shared/components/UI/Toast.jsx';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
         <AppErrorBoundary>
             <Provider store={store}>
                 <PersistGate loading={<PersistLoading />} persistor={persistor}>
-                    <RootApp />
+                    <ToastProvider>
+                        <RootApp />
+                    </ToastProvider>
                 </PersistGate>
             </Provider>
         </AppErrorBoundary>

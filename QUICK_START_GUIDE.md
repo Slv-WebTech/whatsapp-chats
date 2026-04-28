@@ -33,22 +33,34 @@ npm run preview
 ## 4) Main Product Flow
 
 1. Sign in or create account
-2. Open Home and pick/start a chat
-3. Use chat actions from bubble action trigger
-4. Open Settings from chat header for appearance and tools
-5. Use Admin dashboard if account role is admin
+2. Open Home — pick a direct chat, create a group, or join by group ID
+3. In a group chat: tap the group name in the header to open Group Settings
+4. Use bubble long-press / action menu for reply, react (👍 ❤️ 😂 🔥), copy, delete
+5. Group owners can manage members, rename, and delete from Group Settings
+6. Non-owner members can leave from Group Settings
+7. Admin dashboard is accessible via `/admin` for admin-role accounts
 
 ## 5) Refactor-Oriented Dev Notes
 
-- Keep src/App.js lightweight.
-- Add pure logic to src/features/chat.
-- Keep route concerns in src/RootApp.js.
-- Use lazy loading for any heavy page/panel.
+- Keep `src/App.js` lightweight.
+- Add pure helpers to `src/features/chat/appRuntimeHelpers.js`.
+- Keep route concerns and auth bootstrap in `src/RootApp.js`.
+- Use lazy loading for heavy panels (GroupSettingsPanel, AISidePanel, etc.).
+- Group management APIs live in `src/firebase/socialService.js`.
+- Message CRUD and reactions live in `src/firebase/chatService.js`.
 
 ## 6) Quick QA Checklist
 
-- Login and open direct/group chat
-- Send, reply, delete-for-me, delete-for-everyone (own messages only)
-- Verify presence and typing updates
-- Validate imported chat opens correctly
-- Check build completes without errors
+- Login; verify sidebar restores group chats without re-joining
+- Open direct chat: send, reply (check reply block renders), react with emoji
+- Open group chat: verify member count subtitle, sync health chip in header
+- Group Settings: rename, change description, view member list
+- Remove member (admin/owner); confirm system message appears
+- Leave group as non-owner member; confirm removed from sidebar
+- Delete group as owner; confirm chat disappears for all
+- Join a group by ID (open join); join approval-required group (request flow)
+- Rejoined after removal: verify join request submits automatically
+- Delete-for-me and delete-for-everyone (own messages only)
+- Verify presence and typing indicator updates in real time
+- Open imported chat; verify it stays separate from live chats
+- Run `npm run build` — must complete with 0 errors

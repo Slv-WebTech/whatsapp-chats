@@ -1,4 +1,5 @@
 import { createLocalSummary } from './localSummary';
+import { auth } from '../services/firebase/config';
 
 const DEFAULT_PROVIDER_ORDER = ['openai', 'gemini', 'ollama', 'local'];
 
@@ -70,18 +71,18 @@ async function summarizeWithGateway(lastMessages) {
     const timeoutId = window.setTimeout(() => controller.abort(), 24000);
 
     try {
+        const token = await auth?.currentUser?.getIdToken?.();
         const response = await fetch('/api/ai', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
             },
             signal: controller.signal,
             body: JSON.stringify({
-                task: 'summarize',
-                payload: {
-                    mode: 'all',
-                    transcript: lastMessages
-                }
+                task: 'summary',
+                messages: lastMessages,
+                query: 'mode:all'
             })
         });
 
@@ -90,9 +91,11 @@ async function summarizeWithGateway(lastMessages) {
         }
 
         const data = await response.json();
+        const summaryText = String(data?.data?.result || data?.result || '').trim();
+        const provider = String(data?.data?.provider || data?.provider || '').trim().toLowerCase();
         return {
-            summary: normalizeAiText(data?.result?.summary),
-            provider: String(data?.provider || '').trim().toLowerCase()
+            summary: normalizeAiText(summaryText),
+            provider
         };
     } catch {
         return { summary: '', provider: '' };
@@ -109,10 +112,16 @@ export async function summarizeMessagesWithAI(messages, options = {}) {
         return includeMeta ? { summary: fallback, provider: 'empty' } : fallback;
     }
 
-    const lastMessages = truncateForModelInput(toChatTranscript(messages), 9600);
+    const cappedMessages = messages.slice(-180).map((m, index) => ({
+        id: String(m?.id || `summary-${index}`),
+        sender: String(m?.sender || 'System'),
+        message: String(m?.message || ''),
+        date: String(m?.date || ''),
+        time: String(m?.time || '')
+    }));
 
     try {
-        const result = await summarizeWithGateway(lastMessages);
+        const result = await summarizeWithGateway(cappedMessages);
         if (result.summary) {
             return includeMeta
                 ? {

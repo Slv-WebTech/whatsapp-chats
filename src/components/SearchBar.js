@@ -4,8 +4,9 @@ import PremiumUsernameTag from "./PremiumUsernameTag";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
-export default function SearchBar({ userQuery, onUserQueryChange, userResults, onCreateDirectChat, onJoinGroup, loading }) {
-  const [groupSecret, setGroupSecret] = useState("");
+export default function SearchBar({ userQuery, onUserQueryChange, userResults, onCreateDirectChat, onCreateGroup, onJoinGroup, loading, showGroupActions = true }) {
+  const [groupName, setGroupName] = useState("");
+  const [groupId, setGroupId] = useState("");
 
   return (
     <div className="space-y-3">
@@ -34,24 +35,47 @@ export default function SearchBar({ userQuery, onUserQueryChange, userResults, o
         </div>
       ) : null}
 
-      <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Join Group</p>
-        <div className="mt-2 flex gap-2">
-          <Input value={groupSecret} onChange={(event) => setGroupSecret(event.target.value)} placeholder="Enter group secret" className="rounded-2xl" />
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={loading || groupSecret.trim().length < 6}
-            onClick={() => {
-              onJoinGroup(groupSecret);
-              setGroupSecret("");
-            }}
-          >
-            <Unlock size={15} />
-            Join
-          </Button>
-        </div>
-      </div>
+      {showGroupActions ? (
+        <>
+          <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Create Group</p>
+            <div className="mt-2 flex gap-2">
+              <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Enter group name" className="rounded-2xl" />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={loading || groupName.trim().length < 2}
+                onClick={() => {
+                  onCreateGroup?.(groupName);
+                  setGroupName("");
+                }}
+              >
+                <Unlock size={15} />
+                Create
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Join Group</p>
+            <div className="mt-2 flex gap-2">
+              <Input value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="Enter group id" className="rounded-2xl" />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={loading || groupId.trim().length < 8}
+                onClick={() => {
+                  onJoinGroup(groupId);
+                  setGroupId("");
+                }}
+              >
+                <Unlock size={15} />
+                Join
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

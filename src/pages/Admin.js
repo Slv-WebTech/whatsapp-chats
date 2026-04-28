@@ -1,4 +1,4 @@
-import { ArrowLeft, Activity, Eye, EyeOff, MessageSquareMore, ShieldCheck, Users, Zap, TrendingUp } from "lucide-react";
+import { ArrowLeft, Activity, Check, Copy, Eye, EyeOff, MessageSquareMore, ShieldCheck, Users, Zap, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import PremiumUsernameTag from "../components/PremiumUsernameTag";
@@ -107,6 +107,7 @@ export default function AdminPage({ navigate }) {
   const [groups, setGroups] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserDetails, setShowUserDetails] = useState(true);
+  const [copiedGroupId, setCopiedGroupId] = useState('');
 
   useEffect(() => subscribeAdminStats(setStats), []);
   useEffect(() => subscribeAllUsers(setUsers), []);
@@ -115,6 +116,17 @@ export default function AdminPage({ navigate }) {
   const listUsers = useMemo(() => {
     return users;
   }, [users]);
+
+  const usersByUid = useMemo(() => {
+    return users.reduce((acc, u) => { if (u?.uid) acc[u.uid] = u; return acc; }, {});
+  }, [users]);
+
+  function handleCopyGroupId(groupId) {
+    window.navigator?.clipboard?.writeText(groupId).then(() => {
+      setCopiedGroupId(groupId);
+      setTimeout(() => setCopiedGroupId(''), 2000);
+    }).catch(() => { });
+  }
 
   const sortedUsers = useMemo(() => {
     return [...listUsers]
@@ -216,201 +228,223 @@ export default function AdminPage({ navigate }) {
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="scroll-thin absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 md:px-6 md:py-6">
           <div className="space-y-5 pb-6 md:space-y-6">
-          {/* Header */}
-          <div className="space-y-4">
-            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-[var(--text-main)] md:text-4xl">Control Center</h1>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Manage users, monitor activity, and view system statistics</p>
+            {/* Header */}
+            <div className="space-y-4">
+              <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-[var(--text-main)] md:text-4xl">Control Center</h1>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">Manage users, monitor activity, and view system statistics</p>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-300">
+                  <TrendingUp size={13} />
+                  Real-time Updates
+                </span>
               </div>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-300">
-                <TrendingUp size={13} />
-                Real-time Updates
-              </span>
+
+              {/* Gradient Divider */}
+              <div className="h-px w-full rounded-full bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
             </div>
 
-            {/* Gradient Divider */}
-            <div className="h-px w-full rounded-full bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
-          </div>
-
-          {/* Stats Grid */}
-          <div className="space-y-3">
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">Key Metrics</p>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                label="Total Users"
-                value={users.length || stats?.totalUsers || 0}
-                icon={Users}
-                trend={`+${Math.floor(Math.random() * 15)}% this week`}
-                gradient="from-blue-500/15 to-cyan-500/15"
-              />
-              <StatCard
-                label="Active Users 24h"
-                value={activeUsersCount}
-                icon={Activity}
-                trend="Live"
-                gradient="from-emerald-500/15 to-green-500/15"
-              />
-              <StatCard
-                label="Active Groups"
-                value={groups.length || stats?.activeGroups?.length || 0}
-                icon={MessageSquareMore}
-                trend={`+${groups.length} today`}
-                gradient="from-purple-500/15 to-pink-500/15"
-              />
-              <StatCard
-                label="Total Chats"
-                value={groups.length || stats?.totalChats || 0}
-                icon={MessageSquareMore}
-                trend={`+${Math.floor(groups.length * 0.08 || 0)} this month`}
-                gradient="from-orange-500/15 to-red-500/15"
-              />
+            {/* Stats Grid */}
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">Key Metrics</p>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  label="Total Users"
+                  value={users.length || stats?.totalUsers || 0}
+                  icon={Users}
+                  trend={`+${Math.floor(Math.random() * 15)}% this week`}
+                  gradient="from-blue-500/15 to-cyan-500/15"
+                />
+                <StatCard
+                  label="Active Users 24h"
+                  value={activeUsersCount}
+                  icon={Activity}
+                  trend="Live"
+                  gradient="from-emerald-500/15 to-green-500/15"
+                />
+                <StatCard
+                  label="Active Groups"
+                  value={groups.length || stats?.activeGroups?.length || 0}
+                  icon={MessageSquareMore}
+                  trend={`+${groups.length} today`}
+                  gradient="from-purple-500/15 to-pink-500/15"
+                />
+                <StatCard
+                  label="Total Chats"
+                  value={groups.length || stats?.totalChats || 0}
+                  icon={MessageSquareMore}
+                  trend={`+${Math.floor(groups.length * 0.08 || 0)} this month`}
+                  gradient="from-orange-500/15 to-red-500/15"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Users & Groups Grid */}
-          <div className="grid gap-6 grid-cols-1">
-            {/* All Users Section */}
-            <section className="rounded-[1.8rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] backdrop-blur-xl">
-              <div className="border-b border-[var(--border-soft)] bg-gradient-to-r from-blue-500/5 to-cyan-500/5 px-6 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 text-blue-300">
-                      <Users size={18} />
+            {/* Users & Groups Grid */}
+            <div className="grid gap-6 grid-cols-1">
+              {/* All Users Section */}
+              <section className="rounded-[1.8rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] backdrop-blur-xl">
+                <div className="border-b border-[var(--border-soft)] bg-gradient-to-r from-blue-500/5 to-cyan-500/5 px-6 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 text-blue-300">
+                        <Users size={18} />
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-[var(--text-main)]">User Directory</h2>
+                        <p className="text-xs text-[var(--text-muted)]">{sortedUsers.length} members</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="font-bold text-[var(--text-main)]">User Directory</h2>
-                      <p className="text-xs text-[var(--text-muted)]">{sortedUsers.length} members</p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowUserDetails(!showUserDetails)}
+                        className="h-8 w-8 rounded-full border border-blue-400/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-blue-100"
+                        title={showUserDetails ? 'Hide details' : 'Show details'}
+                        aria-label={showUserDetails ? 'Hide details' : 'Show details'}
+                      >
+                        {showUserDetails ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </Button>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-semibold text-blue-300">
+                        <Zap size={11} />
+                        Active
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowUserDetails(!showUserDetails)}
-                      className="h-8 w-8 rounded-full border border-blue-400/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-blue-100"
-                      title={showUserDetails ? 'Hide details' : 'Show details'}
-                      aria-label={showUserDetails ? 'Hide details' : 'Show details'}
-                    >
-                      {showUserDetails ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </Button>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-semibold text-blue-300">
+                </div>
+                <div className="space-y-1 p-4 scroll-thin focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400/50" role="region" aria-label="Users list">
+                  {sortedUsers.length > 0 ? (
+                    sortedUsers.map((user, index) => {
+                      const { isActive, lastActiveAt } = getUserActivityState(user);
+                      const stableKey = String(user?.uid || user?.email || user?.username || `user-${index}`);
+
+                      return (
+                        <div
+                          key={stableKey}
+                          className="group rounded-[1.1rem] border border-transparent bg-gradient-to-r from-[var(--panel)] via-[var(--panel)] to-blue-500/5 px-3.5 py-3 transition-all duration-200 hover:border-blue-400/30 hover:bg-gradient-to-r hover:from-blue-500/10 hover:via-[var(--panel)] hover:to-cyan-500/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400/50"
+                          tabIndex="0"
+                          role="button"
+                        >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                            <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2 overflow-hidden text-xs md:gap-3">
+                              <PremiumUsernameTag username={user.username || "User"} compact className="shrink-0 shadow-[0_8px_20px_rgba(8,145,178,0.18)]" />
+                              {showUserDetails ? (
+                                <>
+                                  <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[45%]">
+                                    <span className="truncate">{user.email || "No email"}</span>
+                                  </span>
+                                  <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[38%]">
+                                    <span className="truncate">Last active: {formatLastActive(lastActiveAt)}</span>
+                                  </span>
+                                  <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[28%]">
+                                    <span className="truncate">Joined: {formatJoinedDate(user?.createdAt)}</span>
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[45%]">
+                                    <span className="truncate">{maskDetail(user.email || "No email")}</span>
+                                  </span>
+                                  <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[38%]">
+                                    <span className="truncate">Last active: {maskDetail(formatLastActive(lastActiveAt))}</span>
+                                  </span>
+                                  <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[28%]">
+                                    <span className="truncate">Joined: {maskDetail(formatJoinedDate(user?.createdAt))}</span>
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 self-start sm:self-auto">
+                              {isActive ? (
+                                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-300 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" title="Active" aria-label="Active" />
+                              ) : (
+                                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-amber-800/65" title="Offline" aria-label="Offline" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-[var(--border-soft)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                      No users found
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Active Groups Section */}
+              <section className="rounded-[1.8rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] backdrop-blur-xl">
+                <div className="border-b border-[var(--border-soft)] bg-gradient-to-r from-purple-500/5 to-pink-500/5 px-6 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 text-purple-300">
+                        <MessageSquareMore size={18} />
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-[var(--text-main)]">Group Chats</h2>
+                        <p className="text-xs text-[var(--text-muted)]">{groups.length} groups</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2.5 py-0.5 text-xs font-semibold text-purple-300">
                       <Zap size={11} />
-                      Active
+                      Live
                     </span>
                   </div>
                 </div>
-              </div>
-              <div className="space-y-1 p-4 scroll-thin focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400/50" role="region" aria-label="Users list">
-                {sortedUsers.length > 0 ? (
-                  sortedUsers.map((user, index) => {
-                    const { isActive, lastActiveAt } = getUserActivityState(user);
-                    const stableKey = String(user?.uid || user?.email || user?.username || `user-${index}`);
-
-                    return (
+                <div className="space-y-1 overflow-x-auto p-4 scroll-thin focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400/50" role="region" aria-label="Groups list">
+                  {groups.length > 0 ? (
+                    groups.map((group) => (
                       <div
-                        key={stableKey}
-                        className="group rounded-[1.1rem] border border-transparent bg-gradient-to-r from-[var(--panel)] via-[var(--panel)] to-blue-500/5 px-3.5 py-3 transition-all duration-200 hover:border-blue-400/30 hover:bg-gradient-to-r hover:from-blue-500/10 hover:via-[var(--panel)] hover:to-cyan-500/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400/50"
+                        key={group.id}
+                        className="group rounded-[1.1rem] border border-transparent bg-gradient-to-r from-[var(--panel)] via-[var(--panel)] to-purple-500/5 px-3.5 py-2.5 transition-all duration-200 hover:border-purple-400/30 hover:bg-gradient-to-r hover:from-purple-500/10 hover:via-[var(--panel)] hover:to-pink-500/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-400/50"
                         tabIndex="0"
                         role="button"
                       >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                          <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2 overflow-hidden text-xs md:gap-3">
-                            <PremiumUsernameTag username={user.username || "User"} compact className="shrink-0 shadow-[0_8px_20px_rgba(8,145,178,0.18)]" />
-                            {showUserDetails ? (
-                              <>
-                                <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[45%]">
-                                  <span className="truncate">{user.email || "No email"}</span>
-                                </span>
-                                <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[38%]">
-                                  <span className="truncate">Last active: {formatLastActive(lastActiveAt)}</span>
-                                </span>
-                                <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[28%]">
-                                  <span className="truncate">Joined: {formatJoinedDate(user?.createdAt)}</span>
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[45%]">
-                                  <span className="truncate">{maskDetail(user.email || "No email")}</span>
-                                </span>
-                                <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[38%]">
-                                  <span className="truncate">Last active: {maskDetail(formatLastActive(lastActiveAt))}</span>
-                                </span>
-                                <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel-soft)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] sm:max-w-[28%]">
-                                  <span className="truncate">Joined: {maskDetail(formatJoinedDate(user?.createdAt))}</span>
-                                </span>
-                              </>
-                            )}
+                        <div className="grid min-w-[760px] grid-cols-[minmax(180px,1.6fr)_minmax(140px,1fr)_minmax(220px,1.35fr)_auto_auto] items-center gap-3 text-xs">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--text-main)]" title={group.name || group.id.slice(0, 12)}>{group.name || group.id.slice(0, 12)}</p>
                           </div>
 
-                          <div className="flex items-center gap-2 self-start sm:self-auto">
-                            {isActive ? (
-                              <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-300 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" title="Active" aria-label="Active" />
-                            ) : (
-                              <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-amber-800/65" title="Offline" aria-label="Offline" />
-                            )}
+                          <div className="min-w-0 text-[var(--text-muted)]">
+                            Owner: <span className="font-medium text-purple-300">{usersByUid[group.ownerId || group.createdBy]?.username || (group.ownerId || group.createdBy || 'Unknown').slice(0, 12)}</span>
                           </div>
+
+                          <div className="min-w-0 flex items-center gap-1.5">
+                            <span className="truncate rounded bg-slate-800/80 px-2 py-0.5 font-mono text-[10px] text-slate-400" title={group.id}>{group.id}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyGroupId(group.id)}
+                              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-purple-500/20 text-purple-300 transition hover:bg-purple-500/40"
+                              aria-label="Copy Group ID"
+                              title="Copy Group ID to join"
+                            >
+                              {copiedGroupId === group.id ? <Check size={10} /> : <Copy size={10} />}
+                            </button>
+                          </div>
+
+                          <span className="inline-flex w-fit items-center gap-1 rounded-full bg-purple-500/15 px-2.5 py-0.5 text-xs font-semibold text-purple-300 whitespace-nowrap md:justify-self-end">
+                            <Users size={11} />
+                            {Array.isArray(group.members) ? group.members.length : 0}
+                          </span>
+
+                          <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap md:justify-self-end ${group.status === 'active' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                            {group.status || 'active'}
+                          </span>
                         </div>
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-lg border border-dashed border-[var(--border-soft)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
-                    No users found
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Active Groups Section */}
-            <section className="rounded-[1.8rem] border border-[var(--border-soft)] bg-[var(--panel-soft)] backdrop-blur-xl">
-              <div className="border-b border-[var(--border-soft)] bg-gradient-to-r from-purple-500/5 to-pink-500/5 px-6 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 text-purple-300">
-                      <MessageSquareMore size={18} />
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-[var(--border-soft)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                      No groups found
                     </div>
-                    <div>
-                      <h2 className="font-bold text-[var(--text-main)]">Group Chats</h2>
-                      <p className="text-xs text-[var(--text-muted)]">{groups.length} groups</p>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2.5 py-0.5 text-xs font-semibold text-purple-300">
-                    <Zap size={11} />
-                    Live
-                  </span>
+                  )}
                 </div>
-              </div>
-              <div className="space-y-1 p-4 scroll-thin focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400/50" role="region" aria-label="Groups list">
-                {groups.length > 0 ? (
-                  groups.map((group) => (
-                    <div
-                      key={group.id}
-                      className="group rounded-[1.1rem] border border-transparent bg-gradient-to-r from-[var(--panel)] via-[var(--panel)] to-purple-500/5 px-3.5 py-2.5 transition-all duration-200 hover:border-purple-400/30 hover:bg-gradient-to-r hover:from-purple-500/10 hover:via-[var(--panel)] hover:to-pink-500/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-400/50"
-                      tabIndex="0"
-                      role="button"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold text-[var(--text-main)]">{group.name || group.id.slice(0, 12)}</p>
-                          <p className="text-xs text-[var(--text-muted)]">Created by {group.createdBy || 'Unknown'}</p>
-                        </div>
-                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-purple-500/15 px-2.5 py-0.5 text-xs font-semibold text-purple-300 whitespace-nowrap">
-                          {group.members?.length || 0} members
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-[var(--border-soft)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
-                    No groups found
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
+              </section>
+            </div>
           </div>
         </div>
       </div>

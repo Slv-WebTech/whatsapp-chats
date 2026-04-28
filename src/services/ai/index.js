@@ -1,7 +1,9 @@
-import { auth } from '../../firebase/config';
+import { auth } from '../../services/firebase/config';
 
 const API_TIMEOUT_MS = 18000;
 const memoryCache = new Map();
+const inFlightRequests = new Map();
+const debounceTimers = new Map();
 
 async function getJwtAuthorizationHeader() {
     try {
@@ -63,7 +65,27 @@ function setCached(cacheKey, value, ttlMs = 120000) {
     });
 }
 
-async function requestAiGateway(task, payload, options = {}) {
+function normalizeGatewayResponse(data) {
+    if (!data || typeof data !== 'object') {
+        return null;
+    }
+
+    const success = Boolean(data.success || data.ok);
+    if (!success) {
+        return null;
+    }
+
+    const provider = String(data?.data?.provider || data?.provider || 'local').trim().toLowerCase();
+    const result = data?.data?.result ?? data?.result;
+
+    return {
+        success: true,
+        provider,
+        result
+    };
+}
+
+async function requestAiGateway(task, request = {}, options = {}) {
     const gatewayEnabled = String(
         import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
     ).toLowerCase() !== 'false';
@@ -72,43 +94,84 @@ async function requestAiGateway(task, payload, options = {}) {
         return null;
     }
 
-    const { timeoutMs = API_TIMEOUT_MS, cacheKey = "", ttlMs = 120000 } = options;
+    const { timeoutMs = API_TIMEOUT_MS, cacheKey = "", ttlMs = 120000, debounceMs = 0 } = options;
+    const messages = Array.isArray(request?.messages) ? request.messages : [];
+    const query = sanitizeText(request?.query || '', 700);
+    const requestKey = `${task}:${cacheKey || query.slice(0, 120)}:${messages.length}`;
+
     const cached = getCached(cacheKey);
     if (cached) {
         return cached;
     }
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-    const authorization = await getJwtAuthorizationHeader();
+    const executeRequest = async () => {
+        if (inFlightRequests.has(requestKey)) {
+            return inFlightRequests.get(requestKey);
+        }
 
-    try {
-        const response = await fetch("/api/ai", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...(authorization ? { Authorization: authorization } : {})
-            },
-            signal: controller.signal,
-            body: JSON.stringify({ task, payload })
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+        const authorization = await getJwtAuthorizationHeader();
+
+        const promise = (async () => {
+            try {
+                const response = await fetch("/api/ai", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(authorization ? { Authorization: authorization } : {})
+                    },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        task,
+                        messages,
+                        query
+                    })
+                });
+
+                if (!response.ok) {
+                    return null;
+                }
+
+                const payload = await response.json();
+                const normalized = normalizeGatewayResponse(payload);
+                if (!normalized) {
+                    return null;
+                }
+
+                setCached(cacheKey, normalized, ttlMs);
+                return normalized;
+            } catch {
+                return null;
+            } finally {
+                window.clearTimeout(timeoutId);
+                inFlightRequests.delete(requestKey);
+            }
+        })();
+
+        inFlightRequests.set(requestKey, promise);
+        return promise;
+    };
+
+    if (debounceMs > 0) {
+        const timerKey = `debounce:${requestKey}`;
+        const priorTimer = debounceTimers.get(timerKey);
+        if (priorTimer) {
+            window.clearTimeout(priorTimer.id);
+            priorTimer.resolve(null);
+        }
+
+        return new Promise((resolve) => {
+            const id = window.setTimeout(async () => {
+                debounceTimers.delete(timerKey);
+                resolve(await executeRequest());
+            }, debounceMs);
+
+            debounceTimers.set(timerKey, { id, resolve });
         });
-
-        if (!response.ok) {
-            return null;
-        }
-
-        const data = await response.json();
-        if (!data || data.ok === false) {
-            return null;
-        }
-
-        setCached(cacheKey, data, ttlMs);
-        return data;
-    } catch {
-        return null;
-    } finally {
-        window.clearTimeout(timeoutId);
     }
+
+    return executeRequest();
 }
 
 function tokenize(value) {
@@ -144,36 +207,6 @@ function cosineSimilarity(left, right) {
     rightCount.forEach((count) => {
         rightNorm += count * count;
     });
-
-    if (!leftNorm || !rightNorm) {
-        return 0;
-    }
-
-    return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
-}
-
-function toNumericVector(value) {
-    if (!Array.isArray(value)) {
-        return [];
-    }
-
-    return value.map((entry) => Number(entry) || 0);
-}
-
-function vectorCosine(left, right) {
-    if (!left.length || !right.length || left.length !== right.length) {
-        return 0;
-    }
-
-    let dot = 0;
-    let leftNorm = 0;
-    let rightNorm = 0;
-
-    for (let index = 0; index < left.length; index += 1) {
-        dot += left[index] * right[index];
-        leftNorm += left[index] * left[index];
-        rightNorm += right[index] * right[index];
-    }
 
     if (!leftNorm || !rightNorm) {
         return 0;
@@ -365,10 +398,10 @@ export async function suggestReplies(messages, currentUser) {
     const transcript = toRecentTranscript(recent, 16);
 
     const gateway = await requestAiGateway(
-        "reply_suggestions",
+        "reply",
         {
-            transcript,
-            currentUser: sanitizeText(currentUser, 32)
+            messages: recent,
+            query: `Current user: ${sanitizeText(currentUser, 32)}`
         },
         {
             cacheKey: `reply:${transcript.slice(-240)}`,
@@ -422,32 +455,21 @@ export async function semanticSearch(messages, queryText, limit = 6) {
     }
 
     const gateway = await requestAiGateway(
-        "embeddings",
+        "search",
         {
+            messages: normalized,
             query,
-            texts: normalized.map((entry) => entry.text)
         },
         {
             cacheKey: `embedding:${query}:${normalized.length}`,
             ttlMs: 90000,
-            timeoutMs: 22000
+            timeoutMs: 22000,
+            debounceMs: 260
         }
     );
 
-    if (Array.isArray(gateway?.result?.queryEmbedding) && Array.isArray(gateway?.result?.messageEmbeddings)) {
-        const queryEmbedding = toNumericVector(gateway.result.queryEmbedding);
-        const rankedByEmbeddings = gateway.result.messageEmbeddings
-            .map((vector, index) => ({
-                score: vectorCosine(queryEmbedding, toNumericVector(vector)),
-                message: normalized[index]
-            }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit)
-            .map((item) => item.message);
-
-        if (rankedByEmbeddings.length) {
-            return rankedByEmbeddings;
-        }
+    if (Array.isArray(gateway?.result?.matches) && gateway.result.matches.length) {
+        return gateway.result.matches.slice(0, limit);
     }
 
     const queryTokens = tokenize(query);
@@ -475,8 +497,11 @@ export async function fetchWebContext(inputText) {
     }
 
     const gateway = await requestAiGateway(
-        "web_context",
-        { query: input },
+        "insights",
+        {
+            messages: [],
+            query: `Web context lookup: ${input}`
+        },
         {
             cacheKey: `web:${input}`,
             ttlMs: 180000,
@@ -484,7 +509,7 @@ export async function fetchWebContext(inputText) {
         }
     );
 
-    return sanitizeText(gateway?.result?.summary || "", 800);
+    return sanitizeText(typeof gateway?.result === 'string' ? gateway.result : '', 800);
 }
 
 export async function summarizeConversation(messages, mode = "all") {
@@ -501,12 +526,10 @@ export async function summarizeConversation(messages, mode = "all") {
     }
 
     const gateway = await requestAiGateway(
-        "summarize",
+        "summary",
         {
-            mode,
-            transcript,
-            keyPoints: breakdown.keyPoints,
-            decisions: breakdown.decisions
+            messages: list,
+            query: `mode:${sanitizeText(mode, 16)}`
         },
         {
             cacheKey: `summary:${mode}:${transcript.slice(-300)}`,
@@ -515,7 +538,7 @@ export async function summarizeConversation(messages, mode = "all") {
         }
     );
 
-    const summary = sanitizeText(gateway?.result?.summary || "", 5000) || createFallbackSummary(list, breakdown);
+    const summary = sanitizeText(typeof gateway?.result === 'string' ? gateway.result : '', 5000) || createFallbackSummary(list, breakdown);
 
     return {
         provider: gateway?.provider || "local",
@@ -533,7 +556,6 @@ function extractTasksFromMessages(messages) {
 
 export async function runAssistantCommand(commandText, messages) {
     const safeCommand = sanitizeText(commandText, 240);
-    const recentTranscript = toRecentTranscript(messages, 80);
 
     let intent = "explain";
     if (/\bsummarize\b/i.test(safeCommand)) {
@@ -543,11 +565,10 @@ export async function runAssistantCommand(commandText, messages) {
     }
 
     const gateway = await requestAiGateway(
-        "assistant",
+        "insights",
         {
-            command: safeCommand,
-            intent,
-            transcript: recentTranscript
+            messages: (messages || []).slice(-80),
+            query: `${intent}: ${safeCommand}`
         },
         {
             cacheKey: `assistant:${intent}:${safeCommand}`,
@@ -556,7 +577,7 @@ export async function runAssistantCommand(commandText, messages) {
         }
     );
 
-    const serverReply = sanitizeText(gateway?.result?.reply || "", 3200);
+    const serverReply = sanitizeText(typeof gateway?.result === 'string' ? gateway.result : '', 3200);
     if (serverReply) {
         return serverReply;
     }

@@ -1,11 +1,15 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import AuthForms from './components/AuthForms';
-import { useSimpleRouter } from './hooks/useSimpleRouter';
+import AuthForms from './features/auth/components/AuthForms';
+import OnboardingModal, { useOnboarding } from './components/OnboardingModal.jsx';
+import { useSimpleRouter } from './app/router/useSimpleRouter';
+import { useInactivityLogout } from './hooks/useInactivityLogout';
+import { useToast } from './components/ui/Toast.jsx';
 const AdminPage = lazy(() => import('./pages/Admin'));
 const ChatPage = lazy(() => import('./pages/Chat'));
 const Home = lazy(() => import('./pages/Home'));
 const ImportedChatPage = lazy(() => import('./pages/ImportedChat'));
+const LandingPage = lazy(() => import('./pages/LandingPage.jsx'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
 import { getActiveChatRouteId, setActiveChatRouteId } from './utils/chatRouteState';
 import {
@@ -17,16 +21,18 @@ import {
     setResolvedAuthState
 } from './store/authSlice';
 import { selectThemePreference } from './store/appSessionSlice';
-import { loadUserProfile, subscribeAuthUser } from './firebase/socialService';
+import { loadUserProfile, subscribeAuthUser, syncUserChatMembership } from './services/firebase/socialService';
 
 export default function RootApp() {
     const dispatch = useDispatch();
     const route = useSimpleRouter();
     const isAuthenticated = useSelector(selectIsAuthenticated);
+    const { toast } = useToast();
     const isAdmin = useSelector(selectIsAdmin);
     const authInitialized = useSelector(selectAuthInitialized);
     const themePreference = useSelector(selectThemePreference);
     const [prefersDark, setPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const { show: showOnboarding, dismiss: dismissOnboarding } = useOnboarding();
 
     // Keep data-theme in sync across all pages
     useEffect(() => {
@@ -49,6 +55,9 @@ export default function RootApp() {
             }
 
             const nextProfile = await loadUserProfile(firebaseUser.uid);
+            syncUserChatMembership(firebaseUser.uid).catch(() => {
+                // Non-blocking warmup for user chat sidebar data.
+            });
             dispatch(
                 setResolvedAuthState({
                     user: { uid: firebaseUser.uid, email: firebaseUser.email || '' },
@@ -69,10 +78,10 @@ export default function RootApp() {
         const isProtectedPath = route.path === '/home' || route.path === '/profile' || route.path === '/chat' || route.path.startsWith('/chat/') || route.path.startsWith('/imported/') || route.path === '/admin';
 
         if (!isAuthenticated && isProtectedPath) {
-            route.navigate('/', { replace: true });
+            route.navigate('/landing', { replace: true });
         }
 
-        if (isAuthenticated && route.path === '/') {
+        if (isAuthenticated && (route.path === '/' || route.path === '/landing')) {
             route.navigate('/home', { replace: true });
         }
 
@@ -96,10 +105,20 @@ export default function RootApp() {
         route.navigate('/chat', { replace: true });
     }, [route]);
 
-    const handleLogout = async () => {
+    const handleLogout = useCallback(async () => {
         await dispatch(logoutUser());
         route.navigate('/', { replace: true });
-    };
+    }, [dispatch, route]);
+
+    const handleInactivityWarning = useCallback(() => {
+        toast('You will be logged out in 1 minute due to inactivity.', 'info', 60000);
+    }, [toast]);
+
+    useInactivityLogout({
+        enabled: isAuthenticated,
+        onLogout: handleLogout,
+        onWarning: handleInactivityWarning,
+    });
 
     const loadingFallback = (
         <div className="grid min-h-[100svh] place-items-center bg-[var(--page-bg)] text-[var(--text-main)]">
@@ -136,5 +155,26 @@ export default function RootApp() {
         return <Suspense fallback={loadingFallback}><ProfilePage navigate={route.navigate} onLogout={handleLogout} /></Suspense>;
     }
 
-    return <AuthForms onAuthenticated={() => route.navigate('/home')} />;
+    if (route.path === '/landing') {
+        return (
+            <Suspense fallback={loadingFallback}>
+                {showOnboarding && <OnboardingModal onDone={dismissOnboarding} />}
+                <LandingPage
+                    onSignIn={() => route.navigate('/')}
+                    onSelectAction={(action) => {
+                        if (action === 'live') route.navigate('/');
+                        else if (action === 'import') route.navigate('/');
+                        else if (action === 'analyze') route.navigate('/');
+                    }}
+                />
+            </Suspense>
+        );
+    }
+
+    return (
+        <>
+            {isAuthenticated && showOnboarding && <OnboardingModal onDone={dismissOnboarding} />}
+            <AuthForms onAuthenticated={() => route.navigate('/home')} />
+        </>
+    );
 }

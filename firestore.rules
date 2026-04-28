@@ -29,13 +29,64 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid in chatDoc(chatId).data.members;
     }
 
+    function isChatOwner(chatId) {
+      return isSignedIn() && chatDoc(chatId).data.ownerId == request.auth.uid;
+    }
+
+    function canModerateGroup(chatId) {
+      return isAdmin() || isChatOwner(chatId);
+    }
+
+    function isOpenGroup(chatId) {
+      return isSignedIn()
+        && chatDoc(chatId).data.type == 'group'
+        && chatDoc(chatId).data.status == 'active'
+        && (
+          !('joinPolicy' in chatDoc(chatId).data)
+          || chatDoc(chatId).data.joinPolicy == 'group-id'
+        );
+    }
+
+    function isDirectJoiningGroup() {
+      return isSignedIn()
+        && resource.data.type == 'group'
+        && resource.data.joinPolicy == 'group-id'
+        && resource.data.approvalRequired == false
+        && !(request.auth.uid in resource.data.members)
+        && request.auth.uid in request.resource.data.members;
+    }
+
     function isValidMessageCreate() {
-      return request.resource.data.encrypted == true
+      return (
+        request.resource.data.type == 'system'
+        && request.resource.data.uid == 'system'
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+      ) || (
+        request.resource.data.encrypted == true
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 1400
-        && request.resource.data.type is string;
+        && request.resource.data.type is string
+        && (
+          !('pinned' in request.resource.data)
+          || request.resource.data.pinned == false
+        )
+      );
+    }
+
+    function isMessageOwner(chatId, messageId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.uid == request.auth.uid;
+    }
+
+    function isValidMessageUpdate(chatId, messageId) {
+      // Allow reactions, deliveredTo, readBy, hiddenFor, pinned, bookmarkedBy updates only
+      let allowed = ['reactions', 'deliveredTo', 'readBy', 'hiddenFor', 'pinned', 'pinnedAt', 'bookmarkedBy'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed)
+        || isAdmin()
+        || canModerateGroup(chatId);
     }
 
     function isConfiguredAdminUid(uid) {
@@ -56,21 +107,47 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow read: if canAccessChat(chatId) || isAdmin();
+      allow read: if canAccessChat(chatId) || isAdmin() || isOpenGroup(chatId);
       allow create: if isSignedIn()
         && request.resource.data.members is list
         && request.resource.data.members.size() >= 1
         && request.resource.data.members.size() <= 50
-        && request.auth.uid in request.resource.data.members;
-      allow update: if canAccessChat(chatId) || isAdmin();
-      allow delete: if isAdmin();
+        && request.auth.uid in request.resource.data.members
+        && (
+          request.resource.data.type != 'group'
+          || (
+            request.resource.data.ownerId == request.auth.uid
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.joinPolicy == 'group-id'
+          )
+        );
+      allow update: if canAccessChat(chatId) || isAdmin() || isDirectJoiningGroup();
+      allow delete: if isAdmin() || isChatOwner(chatId);
+    }
+
+    match /chats/{chatId}/join_requests/{uid} {
+      allow read: if isSelf(uid) || canModerateGroup(chatId);
+      allow create: if isSignedIn()
+        && uid == request.auth.uid
+        && !isChatMember(chatId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.state == 'pending';
+      allow update: if canModerateGroup(chatId)
+        || (
+          isSignedIn()
+          && uid == request.auth.uid
+          && !isChatMember(chatId)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.state == 'pending'
+        );
+      allow delete: if canModerateGroup(chatId);
     }
 
     match /chats/{chatId}/messages/{messageId} {
       allow read: if canAccessChat(chatId) || isAdmin();
       allow create: if canAccessChat(chatId) && isValidMessageCreate();
-      allow update: if canAccessChat(chatId) || isAdmin();
-      allow delete: if isAdmin();
+      allow update: if (canAccessChat(chatId) && isValidMessageUpdate(chatId, messageId)) || isAdmin();
+      allow delete: if isAdmin() || (canAccessChat(chatId) && isMessageOwner(chatId, messageId));
     }
 
     match /chats/{chatId}/typing/{uid} {

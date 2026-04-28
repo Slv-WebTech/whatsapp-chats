@@ -339,6 +339,74 @@ export function decryptDisplayNameSafely(encryptedValue, secret) {
     }
 }
 
+/**
+ * Normalizes a reaction count value that may be stored as an array (array-union style)
+ * or as a numeric increment. Returns a safe non-negative integer.
+ */
+export function normalizeReactionCount(count) {
+    if (Array.isArray(count)) {
+        return count.length;
+    }
+
+    const n = Number(count);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/**
+ * Derives a human-readable sync health label from connection state flags.
+ * @param {{ isOnline: boolean, isLoading: boolean, hasError: boolean }} params
+ * @returns {'Live' | 'Syncing' | 'Degraded' | 'Offline'}
+ */
+export function getSyncHealthLabel({ isOnline, isLoading, hasError }) {
+    if (!isOnline) {
+        return 'Offline';
+    }
+
+    if (hasError) {
+        return 'Degraded';
+    }
+
+    if (isLoading) {
+        return 'Syncing';
+    }
+
+    return 'Live';
+}
+
+/**
+ * Returns a display label for a group member role.
+ * @param {'owner' | 'admin' | 'member' | string} role
+ * @returns {string}
+ */
+export function getGroupRoleLabel(role) {
+    const normalized = String(role || '').toLowerCase();
+
+    if (normalized === 'owner') {
+        return 'Owner';
+    }
+
+    if (normalized === 'admin') {
+        return 'Admin';
+    }
+
+    return 'Member';
+}
+
+/**
+ * Sorts group members array by role priority: owner first, then admin, then member.
+ * @param {Array<{ role?: string }>} members
+ * @returns {Array}
+ */
+export function sortMembersByRole(members) {
+    const priority = { owner: 0, admin: 1, member: 2 };
+
+    return [...(members || [])].sort((a, b) => {
+        const pa = priority[String(a?.role || 'member').toLowerCase()] ?? 2;
+        const pb = priority[String(b?.role || 'member').toLowerCase()] ?? 2;
+        return pa - pb;
+    });
+}
+
 export function mapQueuedMessageToUiMessage(entry, secret) {
     const createdAtMs = Number(entry?.createdAtMs || Date.now());
     const senderUid = String(entry?.uid || 'unknown').trim();
