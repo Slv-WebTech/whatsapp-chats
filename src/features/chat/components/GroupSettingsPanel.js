@@ -41,6 +41,7 @@ export default function GroupSettingsPanel({
     const [name, setName] = useState(group?.name || '');
     const [description, setDescription] = useState(group?.description || '');
     const [photoUrl, setPhotoUrl] = useState(group?.photoUrl || '');
+    const [approvalRequired, setApprovalRequired] = useState(true);
     const [copied, setCopied] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -48,7 +49,20 @@ export default function GroupSettingsPanel({
         setName(group?.name || '');
         setDescription(group?.description || '');
         setPhotoUrl(group?.photoUrl || '');
-    }, [group?.description, group?.name, group?.photoUrl]);
+        const approvalFlagPresent = (
+            Object.prototype.hasOwnProperty.call(group || {}, 'approvalRequired')
+            || Object.prototype.hasOwnProperty.call(group || {}, 'requireJoinApproval')
+            || Object.prototype.hasOwnProperty.call(group || {}, 'joinApproval')
+        );
+        const nextApprovalRequired = approvalFlagPresent
+            ? Boolean(
+                group?.approvalRequired === true
+                || group?.requireJoinApproval === true
+                || group?.joinApproval === 'admin'
+            )
+            : true;
+        setApprovalRequired(nextApprovalRequired);
+    }, [group?.approvalRequired, group?.description, group?.joinApproval, group?.name, group?.photoUrl, group?.requireJoinApproval]);
 
     const sortedMembers = useMemo(() => {
         return [...members].sort((a, b) => {
@@ -71,7 +85,8 @@ export default function GroupSettingsPanel({
             await onSave({
                 name: String(name || '').trim(),
                 description: String(description || '').trim(),
-                photoUrl: String(photoUrl || '').trim()
+                photoUrl: String(photoUrl || '').trim(),
+                approvalRequired
             });
         } finally {
             setSaving(false);
@@ -161,6 +176,20 @@ export default function GroupSettingsPanel({
                                     disabled={!canManage}
                                     className="input-surface h-10 w-full text-sm disabled:opacity-50"
                                     placeholder="https://…"
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                                <span>
+                                    <span className="block text-xs font-medium text-[var(--text-main)]">Require Approval To Join</span>
+                                    <span className="block text-[11px] text-[var(--text-muted)]">Only approved users can become members and view messages.</span>
+                                </span>
+                                <input
+                                    type="checkbox"
+                                    checked={approvalRequired}
+                                    onChange={(e) => setApprovalRequired(Boolean(e.target.checked))}
+                                    disabled={!canManage}
+                                    className="h-4 w-4 rounded border-white/20 bg-transparent accent-emerald-400 disabled:opacity-50"
                                 />
                             </label>
 

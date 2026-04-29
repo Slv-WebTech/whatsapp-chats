@@ -35,6 +35,7 @@ const ADMIN_UID_ALLOWLIST = new Set(['djK91MD4FiTQIqxD392Tz8WZqnB2']);
 const ADMIN_EMAIL_ALLOWLIST = new Set(['admin@slv-webtech.com']);
 const READ_STATE_WRITE_THROTTLE_MS = 60000;
 const lastReadStateWriteAt = new Map();
+const API_BASE = String(import.meta.env.PUBLIC_API_BASE_URL || '/api').replace(/\/$/, '');
 
 function isFirestoreTimestamp(value) {
     return Boolean(value) && typeof value === 'object' && typeof value.toMillis === 'function';
@@ -65,7 +66,7 @@ function toSerializable(value) {
 
 function ensureFirebase() {
     if (!auth || !db) {
-        throw new Error('Firebase is not configured. Add VITE_FIREBASE_* values.');
+        throw new Error('Firebase is not configured. Add PUBLIC_FIREBASE_* values.');
     }
 }
 
@@ -313,6 +314,61 @@ export function subscribeUserChats(userId, callback, onError) {
     }
 
     let fallbackUnsubscribe = null;
+    let isReconcilingMembership = false;
+
+    const dedupeIds = (ids) => Array.from(new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    const areSameSet = (left, right) => {
+        const a = dedupeIds(left);
+        const b = dedupeIds(right);
+        if (a.length !== b.length) {
+            return false;
+        }
+
+        const bSet = new Set(b);
+        return a.every((id) => bSet.has(id));
+    };
+
+    const reconcileMembership = async (primaryChatIds = []) => {
+        if (isReconcilingMembership) {
+            return;
+        }
+
+        isReconcilingMembership = true;
+        try {
+            const membershipSnapshot = await getDocs(
+                query(chatsRef(), where('members', 'array-contains', safeUserId), limit(500))
+            );
+            const membershipIds = dedupeIds(membershipSnapshot.docs.map((entry) => entry.id));
+            const mergedIds = dedupeIds([...primaryChatIds, ...membershipIds]);
+
+            if (!areSameSet(mergedIds, primaryChatIds)) {
+                callback(mergedIds);
+                await setDoc(
+                    userChatsDoc(safeUserId),
+                    {
+                        chatIds: mergedIds,
+                        updatedAt: serverTimestamp()
+                    },
+                    { merge: true }
+                ).catch(() => {
+                    // Reconciliation should improve UX but must not break subscriptions.
+                });
+            }
+        } catch {
+            // Silent by design: fallback listener and primary snapshot already power UI updates.
+        } finally {
+            isReconcilingMembership = false;
+        }
+    };
+
+    const stopMembershipFallback = () => {
+        if (!fallbackUnsubscribe) {
+            return;
+        }
+
+        fallbackUnsubscribe();
+        fallbackUnsubscribe = null;
+    };
 
     const startMembershipFallback = () => {
         if (fallbackUnsubscribe) {
@@ -325,6 +381,13 @@ export function subscribeUserChats(userId, callback, onError) {
                 callback(snapshot.docs.map((entry) => entry.id));
             },
             (fallbackError) => {
+                const code = String(fallbackError?.code || '').toLowerCase();
+                // Avoid surfacing noisy transient auth/permission failures to the UI.
+                if (code.includes('permission-denied') || code.includes('unauthenticated')) {
+                    callback([]);
+                    return;
+                }
+
                 onError?.(fallbackError);
             }
         );
@@ -334,12 +397,29 @@ export function subscribeUserChats(userId, callback, onError) {
         userChatsDoc(safeUserId),
         (snapshot) => {
             const data = snapshot.data() || {};
-            callback(Array.isArray(data.chatIds) ? data.chatIds : []);
+            const chatIds = Array.isArray(data.chatIds) ? data.chatIds : [];
+
+            if (chatIds.length) {
+                stopMembershipFallback();
+                callback(chatIds);
+                reconcileMembership(chatIds);
+                return;
+            }
+
+            // Recover from stale/empty materialized rows by querying membership directly.
+            startMembershipFallback();
+            callback([]);
         },
         (error) => {
             const code = String(error?.code || '').toLowerCase();
             if (code.includes('permission-denied')) {
                 startMembershipFallback();
+                callback([]);
+                return;
+            }
+
+            if (code.includes('unauthenticated')) {
+                callback([]);
                 return;
             }
 
@@ -349,7 +429,7 @@ export function subscribeUserChats(userId, callback, onError) {
 
     return () => {
         primaryUnsubscribe?.();
-        fallbackUnsubscribe?.();
+        stopMembershipFallback();
     };
 }
 
@@ -372,6 +452,82 @@ export async function syncUserChatMembership(userId) {
         },
         { merge: true }
     );
+}
+
+export async function diagnoseUserChatAccess(userId) {
+    ensureFirebase();
+    const safeUserId = String(userId || '').trim();
+    if (!safeUserId) {
+        return {
+            userId: '',
+            canReadUserChats: false,
+            canReadMembershipQuery: false,
+            chatIdsFromUserChats: [],
+            chatIdsFromMembership: [],
+            missingInUserChats: [],
+            staleInUserChats: [],
+            unreadableChatIds: [],
+            error: 'Missing user id.'
+        };
+    }
+
+    const dedupe = (ids) => Array.from(new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean)));
+
+    let canReadUserChats = false;
+    let canReadMembershipQuery = false;
+    let chatIdsFromUserChats = [];
+    let chatIdsFromMembership = [];
+    let firstError = '';
+
+    try {
+        const snapshot = await getDoc(userChatsDoc(safeUserId));
+        const data = snapshot.data() || {};
+        chatIdsFromUserChats = dedupe(Array.isArray(data.chatIds) ? data.chatIds : []);
+        canReadUserChats = true;
+    } catch (error) {
+        firstError = String(error?.message || error || 'Failed reading user_chats.');
+    }
+
+    try {
+        const membershipSnapshot = await getDocs(query(chatsRef(), where('members', 'array-contains', safeUserId), limit(500)));
+        chatIdsFromMembership = dedupe(membershipSnapshot.docs.map((entry) => entry.id));
+        canReadMembershipQuery = true;
+    } catch (error) {
+        if (!firstError) {
+            firstError = String(error?.message || error || 'Failed reading memberships.');
+        }
+    }
+
+    const missingInUserChats = chatIdsFromMembership.filter((id) => !chatIdsFromUserChats.includes(id));
+    const staleInUserChats = chatIdsFromUserChats.filter((id) => !chatIdsFromMembership.includes(id));
+    const probeIds = dedupe([...chatIdsFromUserChats, ...chatIdsFromMembership]).slice(0, 80);
+    const unreadableChatIds = [];
+
+    if (probeIds.length) {
+        const settled = await Promise.allSettled(probeIds.map((id) => getDoc(chatDoc(id))));
+        settled.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                return;
+            }
+
+            const code = String(result.reason?.code || '').toLowerCase();
+            if (code.includes('permission-denied') || code.includes('unauthenticated')) {
+                unreadableChatIds.push(probeIds[index]);
+            }
+        });
+    }
+
+    return {
+        userId: safeUserId,
+        canReadUserChats,
+        canReadMembershipQuery,
+        chatIdsFromUserChats,
+        chatIdsFromMembership,
+        missingInUserChats,
+        staleInUserChats,
+        unreadableChatIds,
+        error: firstError
+    };
 }
 
 export async function fetchChatsByIds(chatIds) {
@@ -522,7 +678,9 @@ export async function createGroupChat(currentProfile, options = {}) {
                 [ownerId]: 'owner'
             },
             joinPolicy: 'group-id',
-            approvalRequired: false,
+            approvalRequired: true,
+            requireJoinApproval: true,
+            joinApproval: 'admin',
             status: 'active',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -610,7 +768,17 @@ export async function joinGroupChatById(currentProfile, groupId) {
         return { chatId };
     }
 
-    const requiresApproval = Boolean(data.requireJoinApproval || data.joinApproval === 'admin');
+    const approvalFlagPresent = (
+        Object.prototype.hasOwnProperty.call(data, 'approvalRequired')
+        || Object.prototype.hasOwnProperty.call(data, 'requireJoinApproval')
+        || Object.prototype.hasOwnProperty.call(data, 'joinApproval')
+    );
+    const requiresApproval = Boolean(
+        !approvalFlagPresent
+        || data.approvalRequired === true
+        || data.requireJoinApproval === true
+        || data.joinApproval === 'admin'
+    );
     const ownerId = String(data.ownerId || data.createdBy || '').trim();
     const canBypassApproval = uid === ownerId || String(currentProfile?.role || '').toLowerCase() === 'admin';
 
@@ -621,6 +789,7 @@ export async function joinGroupChatById(currentProfile, groupId) {
                 uid,
                 username,
                 requestedAt: serverTimestamp(),
+                state: 'pending',
                 status: 'pending'
             },
             { merge: true }
@@ -655,11 +824,51 @@ export function subscribeGroupJoinRequests(chatId, callback, onError) {
     return onSnapshot(
         query(joinRequestsRef(safeChatId), orderBy('requestedAt', 'asc')),
         (snapshot) => {
-            const requests = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+            const requests = snapshot.docs
+                .map((entry) => ({ id: entry.id, ...entry.data() }))
+                .filter((entry) => {
+                    const state = String(entry?.state || entry?.status || 'pending').toLowerCase();
+                    return state === 'pending';
+                });
             callback?.(requests);
         },
         onError
     );
+}
+
+async function resolveJoinRequestWithServer(chatId, requestId, action) {
+    const safeChatId = String(chatId || '').trim();
+    const safeRequestId = String(requestId || '').trim();
+    const safeAction = String(action || '').trim().toLowerCase();
+
+    if (!safeChatId || !safeRequestId || (safeAction !== 'approve' && safeAction !== 'reject')) {
+        throw new Error('Invalid join request moderation payload.');
+    }
+
+    const token = await auth?.currentUser?.getIdToken?.();
+    if (!token) {
+        throw new Error('Missing auth token.');
+    }
+
+    const response = await fetch(`${API_BASE}/chats/join-request`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+            chatId: safeChatId,
+            requestId: safeRequestId,
+            action: safeAction
+        })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(String(data?.details || data?.error || 'Failed to moderate join request.'));
+    }
+
+    return data;
 }
 
 export async function approveJoinRequest(actor, chatId, requestId, fallbackUsername = '') {
@@ -670,6 +879,18 @@ export async function approveJoinRequest(actor, chatId, requestId, fallbackUsern
         return;
     }
 
+    try {
+        await resolveJoinRequestWithServer(safeChatId, safeRequestId, 'approve');
+        return;
+    } catch (serverError) {
+        const msg = String(serverError?.message || serverError || '').toLowerCase();
+        const shouldFallbackClient = msg.includes('missing auth token') || msg.includes('failed to fetch') || msg.includes('networkerror');
+        if (!shouldFallbackClient) {
+            throw serverError;
+        }
+    }
+
+    // Client fallback for environments where API routes are unavailable.
     const requestRef = joinRequestDoc(safeChatId, safeRequestId);
     const requestSnapshot = await getDoc(requestRef);
     if (!requestSnapshot.exists()) {
@@ -703,6 +924,18 @@ export async function rejectJoinRequest(actor, chatId, requestId) {
         return;
     }
 
+    try {
+        await resolveJoinRequestWithServer(safeChatId, safeRequestId, 'reject');
+        return;
+    } catch (serverError) {
+        const msg = String(serverError?.message || serverError || '').toLowerCase();
+        const shouldFallbackClient = msg.includes('missing auth token') || msg.includes('failed to fetch') || msg.includes('networkerror');
+        if (!shouldFallbackClient) {
+            throw serverError;
+        }
+    }
+
+    // Client fallback for environments where API routes are unavailable.
     await deleteDoc(joinRequestDoc(safeChatId, safeRequestId));
 }
 
@@ -718,6 +951,13 @@ export async function updateGroupSettings(actor, chatId, updates = {}) {
         description: String(updates?.description || '').trim(),
         photoUrl: String(updates?.photoUrl || '').trim()
     };
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'approvalRequired')) {
+        const approvalRequired = Boolean(updates.approvalRequired);
+        allowed.approvalRequired = approvalRequired;
+        allowed.requireJoinApproval = approvalRequired;
+        allowed.joinApproval = approvalRequired ? 'admin' : 'none';
+    }
 
     await updateDoc(chatDoc(safeChatId), {
         ...allowed,

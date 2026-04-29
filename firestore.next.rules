@@ -233,15 +233,39 @@ service cloud.firestore {
     }
 
     function isChatMember(chatId) {
-      return isSignedIn() && request.auth.uid in chatDoc(chatId).data.members;
+      return isSignedIn()
+        && chatDoc(chatId).data.members is list
+        && request.auth.uid in chatDoc(chatId).data.members;
     }
 
     function isChatOwner(chatId) {
-      return isSignedIn() && chatDoc(chatId).data.ownerId == request.auth.uid;
+      return isSignedIn()
+        && (
+          chatDoc(chatId).data.ownerId == request.auth.uid
+          || chatDoc(chatId).data.createdBy == request.auth.uid
+        );
+    }
+
+    function isChatMemberFromResource() {
+      return isSignedIn()
+        && resource.data.members is list
+        && request.auth.uid in resource.data.members;
+    }
+
+    function isChatOwnerFromResource() {
+      return isSignedIn()
+        && (
+          resource.data.ownerId == request.auth.uid
+          || resource.data.createdBy == request.auth.uid
+        );
     }
 
     function canAccessChat(chatId) {
       return isChatMember(chatId) || (isSignedIn() && isSharedRoom(chatId));
+    }
+
+    function canAccessChatFromResource(chatId) {
+      return isChatMemberFromResource() || (isSignedIn() && isSharedRoom(chatId));
     }
 
     function canModerateChat(chatId) {
@@ -258,11 +282,32 @@ service cloud.firestore {
         );
     }
 
+    function isOpenGroupFromResource() {
+      return isSignedIn()
+        && resource.data.type == 'group'
+        && resource.data.status == 'active'
+        && (
+          !('joinPolicy' in resource.data)
+          || resource.data.joinPolicy == 'group-id'
+        );
+    }
+
     function isDirectJoiningGroup() {
+      let hasApprovalFlag = (
+        ('approvalRequired' in resource.data)
+        || ('requireJoinApproval' in resource.data)
+        || ('joinApproval' in resource.data)
+      );
+      let requiresApproval = (
+        !hasApprovalFlag
+        || (('approvalRequired' in resource.data) && resource.data.approvalRequired == true)
+        || (('requireJoinApproval' in resource.data) && resource.data.requireJoinApproval == true)
+        || (('joinApproval' in resource.data) && resource.data.joinApproval == 'admin')
+      );
       return isSignedIn()
         && resource.data.type == 'group'
         && resource.data.joinPolicy == 'group-id'
-        && resource.data.approvalRequired == false
+        && !requiresApproval
         && !(request.auth.uid in resource.data.members)
         && request.auth.uid in request.resource.data.members;
     }
@@ -306,7 +351,10 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow read: if canAccessChat(chatId) || isPlatformAdmin() || isOpenGroup(chatId);
+      // get (single-doc read): full check via resource.data
+      allow get: if canAccessChatFromResource(chatId) || isPlatformAdmin() || isOpenGroupFromResource();
+      // list (collection query): only auth check — query filter (array-contains) guarantees membership
+      allow list: if request.auth != null && request.auth.uid in resource.data.members;
       allow create: if isSignedIn()
         && request.resource.data.members is list
         && request.resource.data.members.size() >= 1
@@ -320,8 +368,8 @@ service cloud.firestore {
             && request.resource.data.joinPolicy == 'group-id'
           )
         );
-      allow update: if canAccessChat(chatId) || isPlatformAdmin() || isDirectJoiningGroup();
-      allow delete: if isPlatformAdmin() || isChatOwner(chatId);
+      allow update: if canAccessChatFromResource(chatId) || isPlatformAdmin() || isDirectJoiningGroup();
+      allow delete: if isPlatformAdmin() || isChatOwnerFromResource();
     }
 
     match /chats/{chatId}/join_requests/{uid} {

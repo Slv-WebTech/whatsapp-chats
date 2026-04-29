@@ -2,7 +2,7 @@ import CryptoJS from 'crypto-js';
 
 const DB_NAME = 'beyondstrings-imported-chats';
 const STORE_NAME = 'importedChats';
-const SECRET = import.meta.env.VITE_IMPORTED_CHAT_SECRET || import.meta.env.VITE_REDUX_PERSIST_SECRET || 'beyondstrings-imported-chat-v1';
+const SECRET = import.meta.env.PUBLIC_IMPORTED_CHAT_SECRET || import.meta.env.PUBLIC_REDUX_PERSIST_SECRET || 'beyondstrings-imported-chat-v1';
 
 let openDbPromise = null;
 

@@ -24,7 +24,7 @@ function truncateForModelInput(text, maxChars = 9000) {
 }
 
 function getProviderOrder() {
-    const configured = String(import.meta.env.VITE_AI_PROVIDER_ORDER || '')
+    const configured = String(import.meta.env.PUBLIC_AI_PROVIDER_ORDER || '')
         .split(',')
         .map((item) => item.trim().toLowerCase())
         .filter(Boolean);
@@ -40,7 +40,7 @@ function getProviderOrder() {
 
 export function getConfiguredAiProviders() {
     const gatewayEnabled = String(
-        import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
+        import.meta.env.PUBLIC_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
     ).toLowerCase() !== 'false';
 
     return {
@@ -60,7 +60,7 @@ function normalizeAiText(text) {
 
 async function summarizeWithGateway(lastMessages) {
     const gatewayEnabled = String(
-        import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
+        import.meta.env.PUBLIC_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
     ).toLowerCase() !== 'false';
 
     if (!gatewayEnabled) {

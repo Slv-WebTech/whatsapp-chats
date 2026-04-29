@@ -27,7 +27,7 @@ const MESSAGE_PAGE_SIZE = 30;
 
 function ensureDb() {
     if (!db) {
-        throw new Error('Firebase is not configured. Add VITE_FIREBASE_* variables.');
+        throw new Error('Firebase is not configured. Add PUBLIC_FIREBASE_* variables.');
     }
 }
 
@@ -312,11 +312,14 @@ export async function sendRoomMessage(roomId, payload, options) {
         batch.set(doc(db, collectionName, safeChatId), roomActivityUpdate, { merge: true });
     }
 
-    // Secondary write — new rooms/ collection (dual-write, fire-and-forget safe)
-    // Uses the same document ID so backfill can skip already-present messages.
-    const newSchemaMessageRef = doc(db, 'rooms', safeChatId, 'messages', messageRef.id);
-    batch.set(newSchemaMessageRef, { ...messagePayload, _dualWrite: true }, { merge: false });
-    batch.set(doc(db, 'rooms', safeChatId), roomActivityUpdate, { merge: true });
+    // Secondary write — new rooms/ collection (dual-write, Phase 2 migration).
+    // Skip when writing from the legacy chats/ path: the user has no rooms/ membership
+    // record so the write would fail with permission-denied and abort the batch.
+    if (collectionName !== 'chats') {
+        const newSchemaMessageRef = doc(db, 'rooms', safeChatId, 'messages', messageRef.id);
+        batch.set(newSchemaMessageRef, { ...messagePayload, _dualWrite: true }, { merge: false });
+        batch.set(doc(db, 'rooms', safeChatId), roomActivityUpdate, { merge: true });
+    }
 
     await batch.commit();
 }

@@ -41,9 +41,12 @@ export default function ChatListItem({ chat, isActive, onSelect, currentUserId }
   const lastReadAt = toMillis(chat?.memberMeta?.[currentUserId]?.lastReadAt);
   const lastSenderId = String(chat?.lastSenderId || '').trim();
   const isLatestMessageIncoming = !lastSenderId || String(currentUserId || '').trim() !== lastSenderId;
-  const denormalizedUnread = Number(chat?.unreadCount || 0);
+  const hasDenormalizedUnread = Object.prototype.hasOwnProperty.call(chat || {}, 'unreadCount');
+  const denormalizedUnread = Number(chat?.unreadCount);
   const fallbackUnread = lastMessageAt > 0 && lastReadAt < lastMessageAt && isLatestMessageIncoming ? 1 : 0;
-  const unread = Number.isFinite(denormalizedUnread) && denormalizedUnread >= 0 ? denormalizedUnread : fallbackUnread;
+  const unread = hasDenormalizedUnread && Number.isFinite(denormalizedUnread) && denormalizedUnread >= 0
+    ? denormalizedUnread
+    : fallbackUnread;
   const title = chat.displayTitle || chat.name || "Untitled chat";
   const preview =
     chat.previewText ||

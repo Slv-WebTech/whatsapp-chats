@@ -87,7 +87,7 @@ function normalizeGatewayResponse(data) {
 
 async function requestAiGateway(task, request = {}, options = {}) {
     const gatewayEnabled = String(
-        import.meta.env.VITE_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
+        import.meta.env.PUBLIC_AI_GATEWAY_ENABLED || (import.meta.env.DEV ? 'false' : 'true')
     ).toLowerCase() !== 'false';
 
     if (!gatewayEnabled) {

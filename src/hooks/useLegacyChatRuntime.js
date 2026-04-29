@@ -126,7 +126,7 @@ import { getCachedProfiles, clearProfileCache } from '../utils/profileCache';
 
 const ChatInsights = lazy(() => import('../components/ChatInsights'));
 const SettingsPanel = lazy(() => import('../components/SettingsPanel'));
-const MESSAGE_TONE_URL = import.meta.env.VITE_MESSAGE_TONE_URL || `${import.meta.env.BASE_URL}notification.mp3`;
+const MESSAGE_TONE_URL = import.meta.env.PUBLIC_MESSAGE_TONE_URL || `${import.meta.env.BASE_URL}notification.mp3`;
 
 export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTitle = '', initialChatId = '', initialChatType = '' }) {
     const VIRTUALIZE_THRESHOLD = 350;
@@ -245,6 +245,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
     const audioUnlockedRef = useRef(false);
     const pendingIncomingToneRef = useRef(false);
     const lastNotifiedMessageIdRef = useRef('');
+    const hiddenUnreadCountByRoomRef = useRef(new Map());
     const hasExplicitRoomRef = useRef(Boolean(new URLSearchParams(window.location.search).get('room') || persistedRoomId || initialChatId));
     const deliveredMarkedRef = useRef(new Set());
     const readMarkedRef = useRef(new Set());
@@ -492,12 +493,17 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
         }
     }, []);
 
-    const showIncomingSystemNotification = useCallback(async (message) => {
+    const showIncomingSystemNotification = useCallback(async (message, incomingBatchCount = 1) => {
         if (typeof window === 'undefined' || !message) {
             return;
         }
 
+        const safeRoomId = String(roomId || '').trim();
+
         if (window.document?.visibilityState === 'visible' && window.document?.hasFocus?.()) {
+            if (safeRoomId) {
+                hiddenUnreadCountByRoomRef.current.set(safeRoomId, 0);
+            }
             return;
         }
 
@@ -514,11 +520,23 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
         const senderName = String(message.sender || 'New message').trim();
         const previewText = String(message.message || 'You have a new message').trim() || 'You have a new message';
-        const notificationTitle = senderName ? `${senderName}` : BRAND.name;
+        const increment = Number.isFinite(Number(incomingBatchCount)) ? Math.max(1, Number(incomingBatchCount)) : 1;
+        const currentUnread = safeRoomId ? Number(hiddenUnreadCountByRoomRef.current.get(safeRoomId) || 0) : 0;
+        const nextUnread = currentUnread + increment;
+        if (safeRoomId) {
+            hiddenUnreadCountByRoomRef.current.set(safeRoomId, nextUnread);
+        }
+
+        const notificationTitle = nextUnread > 1
+            ? `${nextUnread} unread messages`
+            : (senderName || BRAND.name);
+        const notificationBody = nextUnread > 1
+            ? `${previewText.slice(0, 120)} (+${nextUnread - 1} more)`
+            : previewText.slice(0, 160);
 
         const payload = {
             title: notificationTitle,
-            body: previewText.slice(0, 160),
+            body: notificationBody,
             data: {
                 roomId,
                 url: `${window.location.origin}${import.meta.env.BASE_URL}chat/${encodeURIComponent(String(roomId || '').trim())}`
@@ -791,7 +809,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
         }
 
         setFirebaseError(
-            'Firebase is not configured in this deployed build. .env files are not accessible at runtime on GitHub Pages; VITE_FIREBASE_* must be provided at build/deploy time.'
+            'Firebase is not configured in this deployed build. .env files are not accessible at runtime on GitHub Pages; PUBLIC_FIREBASE_* must be provided at build/deploy time.'
         );
     }, [firebaseReady]);
 
@@ -957,7 +975,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                     if (hasNewIncoming) {
                         playIncomingMessageTone();
                         const latestIncoming = newIncomingMessages[newIncomingMessages.length - 1];
-                        showIncomingSystemNotification(latestIncoming);
+                        showIncomingSystemNotification(latestIncoming, newIncomingMessages.length);
                     }
                 }
 
@@ -1142,6 +1160,10 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                 markPresence(false, { force: true });
             } else {
                 markPresence(true, { force: true });
+                const safeRoomId = String(roomId || '').trim();
+                if (safeRoomId) {
+                    hiddenUnreadCountByRoomRef.current.set(safeRoomId, 0);
+                }
             }
         };
 
@@ -2206,7 +2228,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
     const handleSendLiveMessage = async () => {
         if (!firebaseReady) {
-            setFirebaseError('Firebase config is missing. Add VITE_FIREBASE_* values.');
+            setFirebaseError('Firebase config is missing. Add PUBLIC_FIREBASE_* values.');
             return;
         }
 
@@ -2329,7 +2351,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
     const handleClearChat = async () => {
         if (!firebaseReady) {
-            setFirebaseError('Firebase config is missing. Add VITE_FIREBASE_* values.');
+            setFirebaseError('Firebase config is missing. Add PUBLIC_FIREBASE_* values.');
             return;
         }
 
@@ -2396,7 +2418,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
     const handleDeleteChatData = async () => {
         if (!firebaseReady) {
-            setFirebaseError('Firebase config is missing. Add VITE_FIREBASE_* values.');
+            setFirebaseError('Firebase config is missing. Add PUBLIC_FIREBASE_* values.');
             return;
         }
 
@@ -2530,7 +2552,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
         const members = Array.isArray(groupChatData?.members) ? groupChatData.members : [];
         const usernames = groupChatData?.memberUsernames || {};
         const roles = groupChatData?.memberRoles || {};
-        const ownerId = String(groupChatData?.ownerId || '').trim();
+        const ownerId = String(groupChatData?.ownerId || groupChatData?.createdBy || '').trim();
 
         return members.map((uid) => {
             const safeUid = String(uid || '').trim();
@@ -2546,7 +2568,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
                 avatar: avatars[username] || defaultAvatarMap[username] || `https://i.pravatar.cc/48?u=${safeUid}`
             };
         });
-    }, [isGroupChat, groupChatData?.members, groupChatData?.memberUsernames, groupChatData?.memberRoles, groupChatData?.ownerId, avatars, defaultAvatarMap, memberProfilesMap]);
+    }, [isGroupChat, groupChatData?.members, groupChatData?.memberUsernames, groupChatData?.memberRoles, groupChatData?.ownerId, groupChatData?.createdBy, avatars, defaultAvatarMap, memberProfilesMap]);
 
     const handleOpenGroupSettings = useCallback(() => {
         if (!isGroupChat) {
@@ -2619,9 +2641,9 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
             return false;
         }
 
-        const ownerId = String(groupChatData?.ownerId || '').trim();
+        const ownerId = String(groupChatData?.ownerId || groupChatData?.createdBy || '').trim();
         return Boolean(ownerId) && ownerId !== String(authUid).trim();
-    }, [isGroupChat, authUid, groupChatData?.ownerId]);
+    }, [isGroupChat, authUid, groupChatData?.ownerId, groupChatData?.createdBy]);
 
     const handleLeaveGroup = useCallback(async () => {
         const safeRoomId = String(roomId || '').trim();
@@ -2715,7 +2737,7 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
         const unsub = subscribeChat(safeRoomId, (chatData) => {
             setGroupChatData(chatData || null);
-            setGroupOwnerId(String(chatData?.ownerId || '').trim());
+            setGroupOwnerId(String(chatData?.ownerId || chatData?.createdBy || '').trim());
         }, () => { });
         return () => unsub?.();
     }, [isGroupChat, roomId]);

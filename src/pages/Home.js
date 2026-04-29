@@ -7,13 +7,14 @@ import SearchBar from "../components/SearchBar";
 import PremiumUsernameTag from "../components/PremiumUsernameTag";
 import { Button } from "../components/ui/button";
 import Layout from "./Layout";
-import { createGroupChat, createOrGetDirectChat, fetchChatsByIds, getDirectChatSecret, getGroupChatSecret, joinGroupChatById, searchUsersByUsername, subscribeChat, subscribeUserChats } from "../firebase/socialService";
+import { createGroupChat, createOrGetDirectChat, diagnoseUserChatAccess, fetchChatsByIds, getDirectChatSecret, getGroupChatSecret, joinGroupChatById, searchUsersByUsername, subscribeChat, subscribeUserChats, syncUserChatMembership } from "../firebase/socialService";
 import { parseWhatsAppFileInChunks } from "../utils/parser";
 import { listImportedChats, saveImportedChat } from "../utils/importedChatStore";
 import { selectAuthProfile, selectAuthUser, selectIsAdmin } from "../store/authSlice";
 import { selectAvatarPreferences } from "../store/appSessionSlice";
 import { decryptMessage } from "../utils/encryption";
 import { setActiveChatRouteId } from "../utils/chatRouteState";
+import { resyncMembershipServer } from "../services/api/chatMembership";
 
 function isLikelyGroupChat(chat) {
   const id = String(chat?.id || "").trim().toLowerCase();
@@ -121,7 +122,48 @@ export default function Home({ navigate, onLogout }) {
   const [error, setError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [importHint, setImportHint] = useState("");
+  const [chatDiagnostics, setChatDiagnostics] = useState(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const importInputRef = useRef(null);
+
+  const runChatDiagnostics = async (uid) => {
+    const safeUid = String(uid || '').trim();
+    if (!safeUid) {
+      setChatDiagnostics(null);
+      return;
+    }
+
+    setDiagnosticsLoading(true);
+    try {
+      const report = await diagnoseUserChatAccess(safeUid);
+      setChatDiagnostics(report);
+
+      const shouldLogDebug = report.missingInUserChats.length || report.unreadableChatIds.length || report.staleInUserChats.length;
+      if (shouldLogDebug) {
+        console.groupCollapsed(`[chat-diagnostics] ${safeUid}`);
+        console.info('user_chats ids', report.chatIdsFromUserChats);
+        console.info('membership ids', report.chatIdsFromMembership);
+        console.info('missing in user_chats', report.missingInUserChats);
+        console.info('stale in user_chats', report.staleInUserChats);
+        console.info('unreadable chat ids', report.unreadableChatIds);
+        console.groupEnd();
+      }
+    } catch (diagnoseError) {
+      setChatDiagnostics({
+        userId: safeUid,
+        canReadUserChats: false,
+        canReadMembershipQuery: false,
+        chatIdsFromUserChats: [],
+        chatIdsFromMembership: [],
+        missingInUserChats: [],
+        staleInUserChats: [],
+        unreadableChatIds: [],
+        error: String(diagnoseError?.message || diagnoseError || 'Diagnostics failed.')
+      });
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  };
 
   function extractGroupId(raw) {
     const s = String(raw || '').trim();
@@ -154,7 +196,20 @@ export default function Home({ navigate, onLogout }) {
     }
 
     let cancelled = false;
+    let recoveredFromFailure = false;
     let liveChatUnsubscribers = [];
+
+    resyncMembershipServer()
+      .catch(() => {
+        // Fallback to client-side sync when API route isn't available (e.g., local dev without server env).
+        return syncUserChatMembership(authUser.uid);
+      })
+      .catch(() => {
+        // Non-blocking warmup.
+      })
+      .finally(() => {
+        runChatDiagnostics(authUser.uid);
+      });
 
     const clearLiveSubscriptions = () => {
       liveChatUnsubscribers.forEach((unsubscribe) => unsubscribe?.());
@@ -210,6 +265,10 @@ export default function Home({ navigate, onLogout }) {
     const stopUserChatList = subscribeUserChats(
       authUser.uid,
       (nextChatIds) => {
+        if (!cancelled) {
+          setError("");
+        }
+
         hydrateChatList(nextChatIds).catch(() => {
           if (!cancelled) {
             setChats([]);
@@ -218,8 +277,22 @@ export default function Home({ navigate, onLogout }) {
       },
       () => {
         if (!cancelled) {
-          setError("Unable to load your chat list.");
           setChats([]);
+
+          if (recoveredFromFailure) {
+            setError("Unable to load your chat list.");
+            return;
+          }
+
+          recoveredFromFailure = true;
+          resyncMembershipServer()
+            .catch(() => syncUserChatMembership(authUser.uid))
+            .catch(() => {
+              // If recovery fails once, the next subscription error will surface to the UI.
+            })
+            .finally(() => {
+              runChatDiagnostics(authUser.uid);
+            });
         }
       }
     );
@@ -229,6 +302,15 @@ export default function Home({ navigate, onLogout }) {
       stopUserChatList?.();
       clearLiveSubscriptions();
     };
+  }, [authUser?.uid]);
+
+  useEffect(() => {
+    if (!authUser?.uid) {
+      setChatDiagnostics(null);
+      return;
+    }
+
+    runChatDiagnostics(authUser.uid);
   }, [authUser?.uid]);
 
   useEffect(() => {
@@ -452,6 +534,32 @@ export default function Home({ navigate, onLogout }) {
         onJoinGroup={handleJoinGroup}
         loading={loading}
       />
+
+      {chatDiagnostics ? (
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-soft)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold text-[var(--text-main)]">Chat Diagnostics</p>
+            <button
+              type="button"
+              onClick={() => runChatDiagnostics(authUser?.uid)}
+              className="rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-2.5 py-1 text-[11px] font-semibold"
+              disabled={diagnosticsLoading}
+            >
+              {diagnosticsLoading ? 'Checking...' : 'Re-check'}
+            </button>
+          </div>
+          <p className="mt-1">user_chats readable: {chatDiagnostics.canReadUserChats ? 'yes' : 'no'} | chats membership query readable: {chatDiagnostics.canReadMembershipQuery ? 'yes' : 'no'}</p>
+          <p className="mt-1">user_chats ids: {chatDiagnostics.chatIdsFromUserChats.length} | membership ids: {chatDiagnostics.chatIdsFromMembership.length}</p>
+          {(chatDiagnostics.missingInUserChats.length || chatDiagnostics.unreadableChatIds.length || chatDiagnostics.staleInUserChats.length) ? (
+            <p className="mt-1 text-amber-300">
+              missing in user_chats: {chatDiagnostics.missingInUserChats.length}, stale in user_chats: {chatDiagnostics.staleInUserChats.length}, unreadable chats: {chatDiagnostics.unreadableChatIds.length}
+            </p>
+          ) : (
+            <p className="mt-1 text-emerald-300">No mismatch detected.</p>
+          )}
+          {chatDiagnostics.error ? <p className="mt-1 text-red-300">{chatDiagnostics.error}</p> : null}
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5 md:pr-1">
         {mergedChats.length ? (

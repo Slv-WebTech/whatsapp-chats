@@ -6,7 +6,7 @@ import { BRAND_PUSH_MESSAGE_TAG } from '../../config/brandTokens';
 
 const TOKEN_CACHE_KEY = 'beyondstrings:fcm-token:v1';
 const PREFS_CACHE_KEY = 'beyondstrings:notification-prefs:v1';
-const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const API_BASE = String(import.meta.env.PUBLIC_API_BASE_URL || '/api').replace(/\/$/, '');
 
 function canUseNotifications() {
     return typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
@@ -110,7 +110,7 @@ export async function initializePushNotifications(serviceWorkerRegistration) {
         return { enabled: false, reason: 'messaging-not-supported' };
     }
 
-    const vapidKey = String(import.meta.env.VITE_FIREBASE_VAPID_KEY || '').trim();
+    const vapidKey = String(import.meta.env.PUBLIC_FIREBASE_VAPID_KEY || '').trim();
     if (!vapidKey) {
         return { enabled: false, reason: 'missing-vapid-key' };
     }

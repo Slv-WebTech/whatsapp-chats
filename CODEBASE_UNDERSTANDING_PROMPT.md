@@ -34,7 +34,7 @@
   - session: UI/account preferences (src/store/appSessionSlice.js).
 - Persistence:
   - redux-persist over IndexedDB (src/store/indexedDbStorage.js).
-  - persisted state encrypted with AES using VITE_REDUX_PERSIST_SECRET fallback (src/store/store.js).
+  - persisted state encrypted with AES using PUBLIC_REDUX_PERSIST_SECRET fallback (src/store/store.js).
   - persisted session shape validated on hydrate; invalid payloads are purged.
 
 ## 4) Data Flows

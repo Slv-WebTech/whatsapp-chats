@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
 
     return {
         base,
+        envPrefix: ['PUBLIC_'],
         define: {
             __APP_VERSION__: JSON.stringify(appVersion)
         },

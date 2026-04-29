@@ -1,9 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ---------------------------------------------------------------------
-    // Common helpers
-    // ---------------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
@@ -17,13 +14,7 @@ service cloud.firestore {
     }
 
     function isPlatformAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc(request.auth.uid).data.role == 'admin';
-    }
-
-    function roomDoc(roomId) {
-      return get(/databases/$(database)/documents/rooms/$(roomId));
+      return isSignedIn() && userDoc(request.auth.uid).data.role == 'admin';
     }
 
     function memberDoc(roomId, uid) {
@@ -31,12 +22,7 @@ service cloud.firestore {
     }
 
     function isRoomMember(roomId) {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
-    }
-
-    function roomOwnerId(roomId) {
-      return roomDoc(roomId).data.ownerId;
+      return isSignedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
 
     function roomRole(roomId) {
@@ -46,252 +32,392 @@ service cloud.firestore {
     }
 
     function isRoomOwnerOrAdmin(roomId) {
-      return isPlatformAdmin()
-        || (isRoomMember(roomId) && (
-          roomOwnerId(roomId) == request.auth.uid
-          || roomRole(roomId) in ['owner', 'admin']
-        ));
+      return isPlatformAdmin() || roomRole(roomId) in ['owner', 'admin'];
     }
 
-    // Basic write-rate check. For docs that track lastWrite, each new write
-    // must advance time and set lastWrite to request.time.
-    function passesRateLimitOnUpdate() {
-      return !('lastWrite' in resource.data)
-        || (
-          resource.data.lastWrite is timestamp
-          && request.time > resource.data.lastWrite
-          && ('lastWrite' in request.resource.data)
-          && request.resource.data.lastWrite == request.time
-        );
+    function isValidRoomType(roomType) {
+      return roomType in ['direct', 'group'];
     }
 
-    function onlyHasKeys(allowed) {
-      return request.resource.data.keys().hasOnly(allowed);
+    function isValidMessageType(msgType) {
+      return msgType in ['text', 'image', 'file', 'ai', 'system'];
     }
 
-    // ---------------------------------------------------------------------
-    // 1) USERS
-    // /users/{userId}
-    // - Auth required
-    // - Self can read/write own profile
-    // - Admin can read all and write all
-    // ---------------------------------------------------------------------
+    function onlyKeysChanged(allowed) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    function isValidMessageCreate(roomId) {
+      return request.resource.data.senderId == request.auth.uid
+        && request.resource.data.roomId == roomId
+        && request.resource.data.clientId is string
+        && request.resource.data.clientId.size() > 0
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 4000
+        && isValidMessageType(request.resource.data.type)
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.deleted == false;
+    }
+
+    // Users
     match /users/{userId} {
-      allow read: if isSignedIn() && (isSelf(userId) || isPlatformAdmin());
+      allow read: if isSignedIn();
 
       allow create: if isSelf(userId)
-        && onlyHasKeys(['username', 'usernameKey', 'email', 'role', 'createdAt', 'updatedAt', 'lastSeenAt', 'lastWrite'])
-        && request.resource.data.username is string
-        && request.resource.data.username.size() >= 3
-        && request.resource.data.username.size() <= 30
-        && request.resource.data.email is string
-        && request.resource.data.email.size() > 3
         && request.resource.data.role in ['user', 'admin']
-        && request.resource.data.createdAt is timestamp
-        && request.resource.data.updatedAt is timestamp
-        && request.resource.data.lastWrite is timestamp;
+        && request.resource.data.username is string
+        && request.resource.data.email is string;
 
-      allow update: if isSignedIn()
-        && (
-          isPlatformAdmin()
-          || (
-            isSelf(userId)
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-              'username', 'usernameKey', 'updatedAt', 'lastSeenAt', 'lastWrite'
-            ])
-            && request.resource.data.username is string
-            && request.resource.data.username.size() >= 3
-            && request.resource.data.username.size() <= 30
-            && request.resource.data.updatedAt is timestamp
-            && passesRateLimitOnUpdate()
-          )
-        );
+      allow update: if isSelf(userId)
+        && !('role' in request.resource.data.diff(resource.data).affectedKeys())
+        || isPlatformAdmin();
 
       allow delete: if isPlatformAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // 2) PRESENCE
-    // /presence/{userId}
-    // - Auth required
-    // - User updates own presence
-    // - Others can read
-    // ---------------------------------------------------------------------
+    // Presence
     match /presence/{userId} {
       allow read: if isSignedIn();
-
-      allow create: if isSelf(userId)
-        && onlyHasKeys(['status', 'lastSeen', 'device', 'lastWrite'])
-        && request.resource.data.status in ['online', 'offline', 'away']
-        && request.resource.data.lastSeen is timestamp
-        && request.resource.data.lastWrite is timestamp;
-
-      allow update: if isSelf(userId)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          'status', 'lastSeen', 'device', 'lastWrite'
-        ])
-        && request.resource.data.status in ['online', 'offline', 'away']
-        && request.resource.data.lastSeen is timestamp
-        && (
-          !('lastWrite' in request.resource.data)
-          || request.resource.data.lastWrite is timestamp
-        )
-        && passesRateLimitOnUpdate();
-
+      allow create, update: if isSelf(userId)
+        && request.resource.data.status in ['online', 'offline']
+        && request.resource.data.lastSeen is timestamp;
       allow delete: if isSelf(userId) || isPlatformAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // 3) ROOMS
-    // /rooms/{roomId}
-    // - Only members can read
-    // - Only owner/admin can update
-    // ---------------------------------------------------------------------
+    // Materialized sidebar rows
+    match /userRooms/{userRoomId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid || isPlatformAdmin();
+
+      // Strongly recommended: write this collection only from Cloud Functions/Admin SDK.
+      allow write: if isPlatformAdmin();
+    }
+
+    // Media pointers (binary data remains in Storage)
+    match /media/{fileId} {
+      allow read: if isSignedIn() && isRoomMember(resource.data.roomId) || isPlatformAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.roomId is string
+        && isRoomMember(request.resource.data.roomId)
+        && request.resource.data.url is string;
+      allow update, delete: if isPlatformAdmin();
+    }
+
+    // Rooms root
     match /rooms/{roomId} {
-      allow read: if isSignedIn() && isRoomMember(roomId);
+      allow read: if isRoomMember(roomId) || isPlatformAdmin();
 
       allow create: if isSignedIn()
-        && onlyHasKeys([
-          'type', 'name', 'description', 'photoUrl',
-          'ownerId', 'createdBy', 'members', 'memberRoles', 'memberUsernames',
-          'joinPolicy', 'approvalRequired', 'status',
-          'createdAt', 'updatedAt', 'lastMessageText', 'lastMessageAt',
-          'lastSenderId', 'lastSenderName', 'memberMeta', 'lastWrite'
-        ])
-        && request.resource.data.type in ['group', 'direct']
-        && request.resource.data.ownerId == request.auth.uid
+        && isValidRoomType(request.resource.data.type)
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.members is list
-        && request.resource.data.members.size() >= 1
-        && request.auth.uid in request.resource.data.members
+        && request.resource.data.isEncrypted == true
         && request.resource.data.createdAt is timestamp
-        && request.resource.data.updatedAt is timestamp
-        && request.resource.data.lastWrite is timestamp;
+        && request.resource.data.memberCount is int
+        && request.resource.data.memberCount >= 1;
 
+      // Metadata and lifecycle updates should be owner/admin only.
       allow update: if isRoomOwnerOrAdmin(roomId)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          'name', 'description', 'photoUrl', 'status', 'joinPolicy', 'approvalRequired',
-          'members', 'memberRoles', 'memberUsernames', 'memberMeta',
-          'lastMessageText', 'lastMessageAt', 'lastSenderId', 'lastSenderName',
-          'updatedAt', 'lastWrite'
-        ])
-        && request.resource.data.updatedAt is timestamp
-        && passesRateLimitOnUpdate();
+        || isPlatformAdmin();
 
-      allow delete: if isRoomOwnerOrAdmin(roomId);
+      allow delete: if isRoomOwnerOrAdmin(roomId) || isPlatformAdmin();
 
-      // -------------------------------------------------------------------
-      // 4) MEMBERS
-      // /rooms/{roomId}/members/{userId}
-      // - Member can read if in room
-      // - Only owner/admin can add/remove/update members
-      // -------------------------------------------------------------------
+      // Members
       match /members/{userId} {
-        allow read: if isSignedIn() && isRoomMember(roomId);
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
 
-        allow create: if isRoomOwnerOrAdmin(roomId)
-          && request.resource.data.keys().hasOnly([
-            'uid', 'username', 'role', 'joinedAt', 'lastReadAt', 'lastDeliveredAt', 'isMuted', 'lastWrite'
-          ])
-          && request.resource.data.uid == userId
-          && request.resource.data.role in ['owner', 'admin', 'member']
-          && request.resource.data.lastWrite is timestamp;
+        // Add/remove/promote members: owner/admin only.
+        allow create, delete: if isRoomOwnerOrAdmin(roomId) || isPlatformAdmin();
 
-        allow update: if isRoomOwnerOrAdmin(roomId)
-          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-            'username', 'role', 'lastReadAt', 'lastDeliveredAt', 'isMuted', 'lastWrite'
-          ])
-          && request.resource.data.role in ['owner', 'admin', 'member']
-          && passesRateLimitOnUpdate();
-
-        allow delete: if isRoomOwnerOrAdmin(roomId);
+        // Self can update only personal room-state fields.
+        allow update: if (
+            isSelf(userId)
+            && onlyKeysChanged(['lastReadAt', 'isMuted', 'lastDeliveredAt'])
+          )
+          || isRoomOwnerOrAdmin(roomId)
+          || isPlatformAdmin();
       }
 
-      // -------------------------------------------------------------------
-      // 5) MESSAGES
-      // /rooms/{roomId}/messages/{messageId}
-      // - create/read: room member
-      // - update/delete: sender only
-      // - validation: size, senderId, createdAt
-      // -------------------------------------------------------------------
+      // Messages
       match /messages/{messageId} {
-        function resolvedSenderId() {
-          return ('senderId' in request.resource.data)
-            ? request.resource.data.senderId
-            : request.resource.data.uid;
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+
+        allow create: if isRoomMember(roomId)
+          && isValidMessageCreate(roomId)
+          && !exists(/databases/$(database)/documents/rooms/$(roomId)/dedupe/$(request.resource.data.clientId));
+
+        // Sender can soft-delete/edit limited fields. Admin can moderate.
+        allow update: if (
+            isRoomMember(roomId)
+            && resource.data.senderId == request.auth.uid
+            && onlyKeysChanged(['deleted', 'deletedFor', 'editedAt', 'text'])
+          )
+          || isRoomOwnerOrAdmin(roomId)
+          || isPlatformAdmin();
+
+        // Prefer soft delete, but allow admin hard delete.
+        allow delete: if isRoomOwnerOrAdmin(roomId) || isPlatformAdmin();
+
+        // Reactions per emoji doc
+        match /reactions/{emoji} {
+          allow read: if isRoomMember(roomId) || isPlatformAdmin();
+          // Member can only update reaction count/users map; validate in backend if needed.
+          allow create, update, delete: if isRoomMember(roomId) || isPlatformAdmin();
         }
 
-        function resourceSenderId() {
-          return ('senderId' in resource.data)
-            ? resource.data.senderId
-            : resource.data.uid;
+        // Delivery/read receipts per user
+        match /receipts/{userId} {
+          allow read: if isRoomMember(roomId) || isPlatformAdmin();
+          allow create, update: if isSelf(userId) && isRoomMember(roomId) || isPlatformAdmin();
+          allow delete: if isPlatformAdmin();
         }
-
-        function messageHasRequiredFields() {
-          return (
-              ('senderId' in request.resource.data) || ('uid' in request.resource.data)
-            )
-            && resolvedSenderId() is string
-            && resolvedSenderId() == request.auth.uid
-            && request.resource.data.createdAt is timestamp;
-        }
-
-        function messageShapeIsValid() {
-          return request.resource.data.keys().hasOnly([
-            'senderId', 'uid', 'createdAt', 'text', 'type', 'clientId',
-            'encrypted', 'cipherVersion', 'senderEnc',
-            'reactions', 'deliveredTo', 'readBy', 'tags', 'moderation', 'sender',
-            'lastWrite'
-          ])
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 4000
-          && request.resource.data.type is string
-          && request.resource.data.clientId is string
-          && request.resource.data.clientId.size() > 0
-          && request.resource.data.encrypted == true
-          && (
-            !('lastWrite' in request.resource.data)
-            || request.resource.data.lastWrite is timestamp
-          );
-        }
-
-        allow read: if isSignedIn() && isRoomMember(roomId);
-
-        allow create: if isSignedIn()
-          && isRoomMember(roomId)
-          && messageHasRequiredFields()
-          && messageShapeIsValid();
-
-        allow update: if isSignedIn()
-          && isRoomMember(roomId)
-          && resourceSenderId() == request.auth.uid
-          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-            'text', 'reactions', 'readBy', 'deliveredTo', 'tags', 'moderation', 'lastWrite'
-          ])
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 4000
-          && passesRateLimitOnUpdate();
-
-        allow delete: if isSignedIn()
-          && isRoomMember(roomId)
-          && resourceSenderId() == request.auth.uid;
       }
 
-      // -------------------------------------------------------------------
-      // 6) INSIGHTS
-      // /rooms/{roomId}/insights/{id}
-      // - read: members only
-      // - write: server/admin only
-      // -------------------------------------------------------------------
-      match /insights/{id} {
-        allow read: if isSignedIn() && isRoomMember(roomId);
-        allow create, update, delete: if isPlatformAdmin();
+      // Typing state
+      match /typing/{userId} {
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+        allow create, update: if isSelf(userId)
+          && isRoomMember(roomId)
+          && request.resource.data.isTyping is bool
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if isSelf(userId) || isPlatformAdmin();
+      }
+
+      // AI insights: server-generated only
+      match /insights/{insightId} {
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+        allow write: if isPlatformAdmin();
+      }
+
+      // Rollup analytics: server-generated only
+      match /analyticsDaily/{docId} {
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+        allow write: if isPlatformAdmin();
+      }
+
+      match /analyticsHourly/{docId} {
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+        allow write: if isPlatformAdmin();
+      }
+
+      // Dedupe keys for offline queue/clientId idempotency
+      match /dedupe/{clientId} {
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+        allow create: if isRoomMember(roomId)
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.clientId == clientId;
+        allow update, delete: if isPlatformAdmin();
+      }
+
+      // Optional immutable event stream
+      match /events/{eventId} {
+        allow read: if isRoomMember(roomId) || isPlatformAdmin();
+        allow write: if isPlatformAdmin();
       }
     }
 
-    // Default deny-all
+    // Optional async AI jobs
+    match /aiJobs/{jobId} {
+      allow read: if isSignedIn() && resource.data.requestedBy == request.auth.uid || isPlatformAdmin();
+      allow create: if isSignedIn() && request.resource.data.requestedBy == request.auth.uid;
+      allow update, delete: if isPlatformAdmin();
+    }
+
+    // ─── LEGACY COLLECTIONS (backward-compat during rooms migration) ──────────
+    function chatDoc(chatId) {
+      return get(/databases/$(database)/documents/chats/$(chatId));
+    }
+
+    function isSharedRoom(chatId) {
+      return chatId is string && chatId.matches('^shared-[a-z0-9]+$');
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn()
+        && chatDoc(chatId).data.members is list
+        && request.auth.uid in chatDoc(chatId).data.members;
+    }
+
+    function isChatOwner(chatId) {
+      return isSignedIn()
+        && (
+          chatDoc(chatId).data.ownerId == request.auth.uid
+          || chatDoc(chatId).data.createdBy == request.auth.uid
+        );
+    }
+
+    function isChatMemberFromResource() {
+      return isSignedIn()
+        && resource.data.members is list
+        && request.auth.uid in resource.data.members;
+    }
+
+    function isChatOwnerFromResource() {
+      return isSignedIn()
+        && (
+          resource.data.ownerId == request.auth.uid
+          || resource.data.createdBy == request.auth.uid
+        );
+    }
+
+    function canAccessChat(chatId) {
+      return isChatMember(chatId) || (isSignedIn() && isSharedRoom(chatId));
+    }
+
+    function canAccessChatFromResource(chatId) {
+      return isChatMemberFromResource() || (isSignedIn() && isSharedRoom(chatId));
+    }
+
+    function canModerateChat(chatId) {
+      return isPlatformAdmin() || isChatOwner(chatId);
+    }
+
+    function isOpenGroup(chatId) {
+      return isSignedIn()
+        && chatDoc(chatId).data.type == 'group'
+        && chatDoc(chatId).data.status == 'active'
+        && (
+          !('joinPolicy' in chatDoc(chatId).data)
+          || chatDoc(chatId).data.joinPolicy == 'group-id'
+        );
+    }
+
+    function isOpenGroupFromResource() {
+      return isSignedIn()
+        && resource.data.type == 'group'
+        && resource.data.status == 'active'
+        && (
+          !('joinPolicy' in resource.data)
+          || resource.data.joinPolicy == 'group-id'
+        );
+    }
+
+    function isDirectJoiningGroup() {
+      let hasApprovalFlag = (
+        ('approvalRequired' in resource.data)
+        || ('requireJoinApproval' in resource.data)
+        || ('joinApproval' in resource.data)
+      );
+      let requiresApproval = (
+        !hasApprovalFlag
+        || (('approvalRequired' in resource.data) && resource.data.approvalRequired == true)
+        || (('requireJoinApproval' in resource.data) && resource.data.requireJoinApproval == true)
+        || (('joinApproval' in resource.data) && resource.data.joinApproval == 'admin')
+      );
+      return isSignedIn()
+        && resource.data.type == 'group'
+        && resource.data.joinPolicy == 'group-id'
+        && !requiresApproval
+        && !(request.auth.uid in resource.data.members)
+        && request.auth.uid in request.resource.data.members;
+    }
+
+    function isLegacyMessageCreate() {
+      return (
+        request.resource.data.type == 'system'
+        && request.resource.data.uid == 'system'
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+      ) || (
+        request.resource.data.encrypted == true
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1400
+        && request.resource.data.type is string
+        && (
+          !('pinned' in request.resource.data)
+          || request.resource.data.pinned == false
+        )
+      );
+    }
+
+    function isLegacyMessageOwner(chatId, messageId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.uid == request.auth.uid;
+    }
+
+    function isLegacyMessageUpdate(chatId) {
+      let allowed = ['reactions', 'deliveredTo', 'readBy', 'hiddenFor', 'pinned', 'pinnedAt', 'bookmarkedBy'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed)
+        || isPlatformAdmin()
+        || canModerateChat(chatId);
+    }
+
+    match /user_chats/{uid} {
+      allow read: if isSelf(uid) || isPlatformAdmin();
+      allow create, update: if isSelf(uid) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /chats/{chatId} {
+      // get (single-doc read): full check via resource.data
+      allow get: if canAccessChatFromResource(chatId) || isPlatformAdmin() || isOpenGroupFromResource();
+      // list (collection query): only auth check — query filter (array-contains) guarantees membership
+      allow list: if request.auth != null && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn()
+        && request.resource.data.members is list
+        && request.resource.data.members.size() >= 1
+        && request.resource.data.members.size() <= 50
+        && request.auth.uid in request.resource.data.members
+        && (
+          request.resource.data.type != 'group'
+          || (
+            request.resource.data.ownerId == request.auth.uid
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.joinPolicy == 'group-id'
+          )
+        );
+      allow update: if canAccessChatFromResource(chatId) || isPlatformAdmin() || isDirectJoiningGroup();
+      allow delete: if isPlatformAdmin() || isChatOwnerFromResource();
+    }
+
+    match /chats/{chatId}/join_requests/{uid} {
+      allow read: if isSelf(uid) || canModerateChat(chatId);
+      allow create: if isSignedIn()
+        && uid == request.auth.uid
+        && !isChatMember(chatId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.state == 'pending';
+      allow update: if canModerateChat(chatId)
+        || (
+          isSignedIn()
+          && uid == request.auth.uid
+          && !isChatMember(chatId)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.state == 'pending'
+        );
+      allow delete: if canModerateChat(chatId);
+    }
+
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if canAccessChat(chatId) || isPlatformAdmin();
+      allow create: if canAccessChat(chatId) && isLegacyMessageCreate();
+      allow update: if (canAccessChat(chatId) && isLegacyMessageUpdate(chatId)) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin() || (canAccessChat(chatId) && isLegacyMessageOwner(chatId, messageId));
+    }
+
+    match /chats/{chatId}/typing/{uid} {
+      allow read: if canAccessChat(chatId) || isPlatformAdmin();
+      allow create, update: if (canAccessChat(chatId) && uid == request.auth.uid) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /chats/{chatId}/presence/{uid} {
+      allow read: if canAccessChat(chatId) || isPlatformAdmin();
+      allow create, update: if (canAccessChat(chatId) && uid == request.auth.uid) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /chats/{chatId}/{document=**} {
+      allow read, write: if isPlatformAdmin();
+    }
+
+    match /admin_stats/{docId} {
+      allow read, write: if isPlatformAdmin();
+    }
+
+    // Safety net
     match /{document=**} {
       allow read, write: if false;
     }

@@ -1,6 +1,6 @@
 import { auth } from '../firebase/config';
 
-const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const API_BASE = String(import.meta.env.PUBLIC_API_BASE_URL || '/api').replace(/\/$/, '');
 
 async function getAuthHeader() {
     const token = await auth?.currentUser?.getIdToken?.();

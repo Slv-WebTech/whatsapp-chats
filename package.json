@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "migrate:group-approval:dry": "node scripts/normalize-group-approval.cjs --dry-run",
+    "migrate:group-approval": "node scripts/normalize-group-approval.cjs"
   },
   "keywords": [
     "react",
@@ -23,6 +25,7 @@
     "@radix-ui/react-select": "^2.2.6",
     "@reduxjs/toolkit": "^2.11.2",
     "@upstash/redis": "^1.37.0",
+    "bullmq": "^5.8.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
@@ -30,7 +33,6 @@
     "firebase": "^12.11.0",
     "firebase-admin": "^13.0.1",
     "framer-motion": "^12.38.0",
-    "bullmq": "^5.8.7",
     "html-to-image": "^1.11.13",
     "ioredis": "^5.3.2",
     "lucide-react": "^1.7.0",
@@ -46,6 +48,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "dotenv": "^17.4.2",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "vite": "^5.4.10"

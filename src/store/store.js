@@ -6,7 +6,7 @@ import appSessionReducer from './appSessionSlice';
 import { BRAND_PERSIST_FALLBACK } from '../config/brandTokens';
 import indexedDbStorage from './indexedDbStorage';
 
-const persistSecret = import.meta.env.VITE_REDUX_PERSIST_SECRET || BRAND_PERSIST_FALLBACK;
+const persistSecret = import.meta.env.PUBLIC_REDUX_PERSIST_SECRET || BRAND_PERSIST_FALLBACK;
 let shouldPurgePersistedState = false;
 
 const isValidSessionState = (session) => {
