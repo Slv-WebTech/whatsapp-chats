@@ -786,7 +786,6 @@ export function useLegacyChatRuntime({ onBackHome, onOpenSidebar, initialChatTit
 
                 setAuthUid(credential.user?.uid || '');
                 setAuthReady(true);
-                console.log('✅ Anonymous login successful');
             })
             .catch((err) => {
                 if (cancelled) {

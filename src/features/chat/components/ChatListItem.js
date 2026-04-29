@@ -44,9 +44,12 @@ export default function ChatListItem({ chat, isActive, onSelect, currentUserId }
   const hasDenormalizedUnread = Object.prototype.hasOwnProperty.call(chat || {}, 'unreadCount');
   const denormalizedUnread = Number(chat?.unreadCount);
   const fallbackUnread = lastMessageAt > 0 && lastReadAt < lastMessageAt && isLatestMessageIncoming ? 1 : 0;
-  const unread = hasDenormalizedUnread && Number.isFinite(denormalizedUnread) && denormalizedUnread >= 0
-    ? denormalizedUnread
-    : fallbackUnread;
+  // Never show unread badge for messages sent by the current user.
+  const unread = isLatestMessageIncoming
+    ? (hasDenormalizedUnread && Number.isFinite(denormalizedUnread) && denormalizedUnread >= 0
+        ? denormalizedUnread
+        : fallbackUnread)
+    : 0;
   const title = chat.displayTitle || chat.name || "Untitled chat";
   const preview =
     chat.previewText ||

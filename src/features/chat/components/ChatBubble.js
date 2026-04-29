@@ -331,7 +331,7 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                         }
                     }}
                     className={clsx(
-                        `premium-message-bubble relative min-w-[80px] max-w-[95%] border px-3 pb-2 pt-3 text-left shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md sm:max-w-[88%] md:max-w-[82%] lg:max-w-[75%] md:px-3.5 md:pb-2.5 md:pt-3.5 ${bubbleColor} ${baseRadius} ${radiusClass} ${tailClass}`,
+                        `premium-message-bubble relative min-w-[80px] max-w-[95%] border px-3 pb-2 pt-3 text-left shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md sm:max-w-[88%] md:max-w-[82%] lg:max-w-[100%] md:px-3.5 md:pb-2.5 md:pt-3.5 ${bubbleColor} ${baseRadius} ${radiusClass} ${tailClass}`,
                         isCurrentUser ? 'text-slate-900' : 'text-[var(--text-main)]',
                         isMatch && 'ring-2 ring-yellow-300/80'
                     )}
@@ -357,7 +357,7 @@ function ChatBubble({ message, isCurrentUser, avatar, query, isMatch, messageRef
                         <ChevronDown size={12} />
                     </button>
                     {!isCurrentUser && !message.isGrouped ? (
-                        <p className="chat-bubble-sender mb-1 block max-w-[calc(100%-1.5rem)] truncate pr-6 text-[11px] font-semibold tracking-[0.01em] text-[var(--accent)]">{message.sender}</p>
+                        <p className="chat-bubble-sender mb-1 block max-w-[calc(100%-1.5rem)] pr-6 text-[11px] font-semibold tracking-[0.01em] text-[var(--accent)]">{message.sender}</p>
                     ) : null}
 
                     {message.replyToText ? (

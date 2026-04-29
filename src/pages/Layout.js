@@ -16,7 +16,7 @@ export default function Layout({ sidebar, children, sidebarOpen, onSidebarOpenCh
 
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         {!hideHeader ? (
-          <header className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] bg-[var(--panel-strong)] px-2.5 py-2 backdrop-blur-xl md:px-6 md:py-2.5">
+          <header className="relative z-[80] flex items-center justify-between gap-2 border-b border-[var(--border-soft)] bg-[var(--panel-strong)] px-2.5 py-2 backdrop-blur-xl md:px-6 md:py-2.5">
             <div className="flex min-w-0 items-center gap-2">
               <Button type="button" variant="ghost" size="icon" className="lg:hidden" onClick={() => onSidebarOpenChange(true)}>
                 <Menu size={18} />
@@ -50,7 +50,7 @@ export default function Layout({ sidebar, children, sidebarOpen, onSidebarOpenCh
           </header>
         ) : null}
 
-        <div className="min-h-0 flex-1 flex flex-col overflow-hidden">{children}</div>
+        <div className="relative z-0 min-h-0 flex-1 flex flex-col overflow-hidden">{children}</div>
       </main>
     </div>
   );

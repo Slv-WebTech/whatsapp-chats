@@ -18,7 +18,7 @@ Open http://localhost:5173.
 
 ## 2) Configure Firebase
 
-Create .env.local with your Firebase project values:
+Create `.env.local` with your client values:
 
 ```env
 PUBLIC_FIREBASE_API_KEY=
@@ -28,6 +28,24 @@ PUBLIC_FIREBASE_STORAGE_BUCKET=
 PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 PUBLIC_FIREBASE_APP_ID=
 PUBLIC_REDUX_PERSIST_SECRET=
+PUBLIC_IMPORTED_CHAT_SECRET=
+PUBLIC_API_BASE_URL=/api
+PUBLIC_FIREBASE_VAPID_KEY=
+```
+
+Create `.env` (or Vercel project env) for server routes:
+
+```env
+FIREBASE_PROJECT_ID=
+FIREBASE_CLIENT_EMAIL=
+FIREBASE_PRIVATE_KEY=
+FIREBASE_STORAGE_BUCKET=
+DATABASE_URL=
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+REDIS_URL=
+OPENAI_API_KEY=
+GEMINI_API_KEY=
 ```
 
 ## 3) Build for Production
@@ -35,6 +53,13 @@ PUBLIC_REDUX_PERSIST_SECRET=
 ```bash
 npm run build
 npm run preview
+```
+
+Migration helpers:
+
+```bash
+npm run migrate:group-approval:dry
+npm run migrate:group-approval
 ```
 
 ## 4) Main Product Flow

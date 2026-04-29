@@ -5,7 +5,7 @@ Repository:
 - Owner: Slv-WebTech
 - Name: whatsapp-chats
 - Default branch: main
-- Active working branch: development
+- Active working branch: `development`
 
 Product Branding:
 
@@ -32,6 +32,7 @@ Recommended checks before merge:
 ```bash
 npm install
 npm run build
+npm run migrate:group-approval:dry
 ```
 
 ## Recommended Branch Rules
@@ -44,6 +45,7 @@ npm run build
 
 - Install dependencies
 - Run production build
+- Optional dry-run migration validation
 - Optional: lint and test jobs
 
 ## Release Flow

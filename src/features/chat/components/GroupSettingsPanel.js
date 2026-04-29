@@ -222,7 +222,7 @@ export default function GroupSettingsPanel({
                                 Members ({sortedMembers.length})
                             </p>
 
-                            <div className="max-h-60 space-y-1.5 overflow-y-auto pr-0.5">
+                            <div className=" space-y-1.5 overflow-y-auto pr-0.5">
                                 {sortedMembers.length ? sortedMembers.map((member) => {
                                     const memberId = toMemberId(member);
                                     const isSelf = Boolean(currentUserId) && memberId === currentUserId;

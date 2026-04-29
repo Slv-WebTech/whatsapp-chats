@@ -78,10 +78,10 @@ export default function RootApp() {
         const isProtectedPath = route.path === '/home' || route.path === '/profile' || route.path === '/chat' || route.path.startsWith('/chat/') || route.path.startsWith('/imported/') || route.path === '/admin';
 
         if (!isAuthenticated && isProtectedPath) {
-            route.navigate('/landing', { replace: true });
+            route.navigate('/', { replace: true });
         }
 
-        if (isAuthenticated && (route.path === '/' || route.path === '/landing')) {
+        if (isAuthenticated && (route.path === '/' || route.path === '/landing' || route.path === '/login')) {
             route.navigate('/home', { replace: true });
         }
 
@@ -155,19 +155,27 @@ export default function RootApp() {
         return <Suspense fallback={loadingFallback}><ProfilePage navigate={route.navigate} onLogout={handleLogout} /></Suspense>;
     }
 
-    if (route.path === '/landing') {
+    if (route.path === '/' || route.path === '/landing') {
         return (
             <Suspense fallback={loadingFallback}>
-                {showOnboarding && <OnboardingModal onDone={dismissOnboarding} />}
                 <LandingPage
-                    onSignIn={() => route.navigate('/')}
+                    onSignIn={() => route.navigate('/login')}
                     onSelectAction={(action) => {
-                        if (action === 'live') route.navigate('/');
-                        else if (action === 'import') route.navigate('/');
-                        else if (action === 'analyze') route.navigate('/');
+                        if (action === 'live') route.navigate('/login');
+                        else if (action === 'import') route.navigate('/login');
+                        else if (action === 'analyze') route.navigate('/login');
                     }}
                 />
             </Suspense>
+        );
+    }
+
+    if (route.path === '/login' || route.path === '/sign-up') {
+        return (
+            <>
+                {isAuthenticated && showOnboarding && <OnboardingModal onDone={dismissOnboarding} />}
+                <AuthForms onAuthenticated={() => route.navigate('/home')} />
+            </>
         );
     }
 

@@ -4,15 +4,20 @@ This manifest reflects the current documentation and architecture after the App 
 
 ## Documentation Files
 
-- README.md — full feature list, architecture, env vars, Firestore rules notes
-- QUICK_START_GUIDE.md — install, configure, QA checklist
-- GITHUB_DEPLOYMENT.md — deployment steps for Vercel/Firebase Hosting
+- README.md — full feature list, architecture, env vars, scripts, and screenshot gallery
+- QUICK_START_GUIDE.md — install, env setup (client + server), migrations, QA checklist
+- GITHUB_DEPLOYMENT.md — branch flow and deployment checks
 - AI_FEATURES_TESTING.md — AI feature test cases
 - EDGE_CASE_IMPROVEMENTS.md — edge-case handling notes
 - ROBUSTNESS_IMPLEMENTATION.md — resilience and reliability notes
 - IMPLEMENTATION_COMPLETE.md — original implementation sign-off
 - PROJECT_COMPLETION.md — project milestone record
 - FILE_MANIFEST.md — this file
+
+## Visual Assets
+
+- `screenshots/*.png` — UI preview raster captures
+- `screenshots/*.svg` — vector export variants for documentation and sharing
 
 ## Branding Source of Truth
 

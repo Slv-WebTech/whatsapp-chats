@@ -1,4 +1,4 @@
-import { LogOut, MessageCircle, Shield, Upload, UserCircle2 } from "lucide-react";
+import { LogOut, MessageCircle, Plus, Shield, Upload, UserPlus, Users, X } from "lucide-react";
 import HelpModal from "../components/HelpModal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -7,7 +7,7 @@ import SearchBar from "../components/SearchBar";
 import PremiumUsernameTag from "../components/PremiumUsernameTag";
 import { Button } from "../components/ui/button";
 import Layout from "./Layout";
-import { createGroupChat, createOrGetDirectChat, diagnoseUserChatAccess, fetchChatsByIds, getDirectChatSecret, getGroupChatSecret, joinGroupChatById, searchUsersByUsername, subscribeChat, subscribeUserChats, syncUserChatMembership } from "../firebase/socialService";
+import { createGroupChat, createOrGetDirectChat, fetchChatsByIds, getDirectChatSecret, getGroupChatSecret, joinGroupChatById, searchUsersByUsername, subscribeChat, subscribeUserChats, syncUserChatMembership } from "../firebase/socialService";
 import { parseWhatsAppFileInChunks } from "../utils/parser";
 import { listImportedChats, saveImportedChat } from "../utils/importedChatStore";
 import { selectAuthProfile, selectAuthUser, selectIsAdmin } from "../store/authSlice";
@@ -83,12 +83,16 @@ function buildLastMessagePreview(chat) {
     return 'No messages yet';
   }
 
+  if (raw.startsWith('wc:')) {
+    return '[Message]';
+  }
+
   if (raw.startsWith('U2FsdGVkX1')) {
     if (isLikelyGroupChat(chat) && chat?.id) {
       try {
         return decryptMessage(raw, getGroupChatSecret(chat.id));
       } catch {
-        return 'Encrypted message';
+        return '[Message]';
       }
     }
 
@@ -96,11 +100,11 @@ function buildLastMessagePreview(chat) {
       try {
         return decryptMessage(raw, getDirectChatSecret(chat.id));
       } catch {
-        return 'Encrypted message';
+        return '[Message]';
       }
     }
 
-    return 'Encrypted message';
+    return '[Message]';
   }
 
   return raw;
@@ -122,48 +126,24 @@ export default function Home({ navigate, onLogout }) {
   const [error, setError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [importHint, setImportHint] = useState("");
-  const [chatDiagnostics, setChatDiagnostics] = useState(null);
-  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [joinGroupId, setJoinGroupId] = useState("");
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [joinGroupOpen, setJoinGroupOpen] = useState(false);
+  const createGroupRef = useRef(null);
+  const joinGroupRef = useRef(null);
+
   const importInputRef = useRef(null);
 
-  const runChatDiagnostics = async (uid) => {
-    const safeUid = String(uid || '').trim();
-    if (!safeUid) {
-      setChatDiagnostics(null);
-      return;
+  useEffect(() => {
+    if (!createGroupOpen && !joinGroupOpen) return;
+    function handleClick(e) {
+      if (createGroupRef.current && !createGroupRef.current.contains(e.target)) setCreateGroupOpen(false);
+      if (joinGroupRef.current && !joinGroupRef.current.contains(e.target)) setJoinGroupOpen(false);
     }
-
-    setDiagnosticsLoading(true);
-    try {
-      const report = await diagnoseUserChatAccess(safeUid);
-      setChatDiagnostics(report);
-
-      const shouldLogDebug = report.missingInUserChats.length || report.unreadableChatIds.length || report.staleInUserChats.length;
-      if (shouldLogDebug) {
-        console.groupCollapsed(`[chat-diagnostics] ${safeUid}`);
-        console.info('user_chats ids', report.chatIdsFromUserChats);
-        console.info('membership ids', report.chatIdsFromMembership);
-        console.info('missing in user_chats', report.missingInUserChats);
-        console.info('stale in user_chats', report.staleInUserChats);
-        console.info('unreadable chat ids', report.unreadableChatIds);
-        console.groupEnd();
-      }
-    } catch (diagnoseError) {
-      setChatDiagnostics({
-        userId: safeUid,
-        canReadUserChats: false,
-        canReadMembershipQuery: false,
-        chatIdsFromUserChats: [],
-        chatIdsFromMembership: [],
-        missingInUserChats: [],
-        staleInUserChats: [],
-        unreadableChatIds: [],
-        error: String(diagnoseError?.message || diagnoseError || 'Diagnostics failed.')
-      });
-    } finally {
-      setDiagnosticsLoading(false);
-    }
-  };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [createGroupOpen, joinGroupOpen]);
 
   function extractGroupId(raw) {
     const s = String(raw || '').trim();
@@ -206,9 +186,6 @@ export default function Home({ navigate, onLogout }) {
       })
       .catch(() => {
         // Non-blocking warmup.
-      })
-      .finally(() => {
-        runChatDiagnostics(authUser.uid);
       });
 
     const clearLiveSubscriptions = () => {
@@ -289,9 +266,6 @@ export default function Home({ navigate, onLogout }) {
             .catch(() => syncUserChatMembership(authUser.uid))
             .catch(() => {
               // If recovery fails once, the next subscription error will surface to the UI.
-            })
-            .finally(() => {
-              runChatDiagnostics(authUser.uid);
             });
         }
       }
@@ -302,15 +276,6 @@ export default function Home({ navigate, onLogout }) {
       stopUserChatList?.();
       clearLiveSubscriptions();
     };
-  }, [authUser?.uid]);
-
-  useEffect(() => {
-    if (!authUser?.uid) {
-      setChatDiagnostics(null);
-      return;
-    }
-
-    runChatDiagnostics(authUser.uid);
   }, [authUser?.uid]);
 
   useEffect(() => {
@@ -533,33 +498,8 @@ export default function Home({ navigate, onLogout }) {
         onCreateGroup={handleCreateGroup}
         onJoinGroup={handleJoinGroup}
         loading={loading}
+        showGroupActions={false}
       />
-
-      {chatDiagnostics ? (
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-soft)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold text-[var(--text-main)]">Chat Diagnostics</p>
-            <button
-              type="button"
-              onClick={() => runChatDiagnostics(authUser?.uid)}
-              className="rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-2.5 py-1 text-[11px] font-semibold"
-              disabled={diagnosticsLoading}
-            >
-              {diagnosticsLoading ? 'Checking...' : 'Re-check'}
-            </button>
-          </div>
-          <p className="mt-1">user_chats readable: {chatDiagnostics.canReadUserChats ? 'yes' : 'no'} | chats membership query readable: {chatDiagnostics.canReadMembershipQuery ? 'yes' : 'no'}</p>
-          <p className="mt-1">user_chats ids: {chatDiagnostics.chatIdsFromUserChats.length} | membership ids: {chatDiagnostics.chatIdsFromMembership.length}</p>
-          {(chatDiagnostics.missingInUserChats.length || chatDiagnostics.unreadableChatIds.length || chatDiagnostics.staleInUserChats.length) ? (
-            <p className="mt-1 text-amber-300">
-              missing in user_chats: {chatDiagnostics.missingInUserChats.length}, stale in user_chats: {chatDiagnostics.staleInUserChats.length}, unreadable chats: {chatDiagnostics.unreadableChatIds.length}
-            </p>
-          ) : (
-            <p className="mt-1 text-emerald-300">No mismatch detected.</p>
-          )}
-          {chatDiagnostics.error ? <p className="mt-1 text-red-300">{chatDiagnostics.error}</p> : null}
-        </div>
-      ) : null}
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5 md:pr-1">
         {mergedChats.length ? (
@@ -609,6 +549,90 @@ export default function Home({ navigate, onLogout }) {
         showAdmin={isAdmin}
         rightAction={
           <div className="flex items-center gap-1.5 md:gap-2">
+            {/* Create Group popover */}
+            <div className="relative" ref={createGroupRef}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                onClick={() => { setCreateGroupOpen((v) => !v); setJoinGroupOpen(false); }}
+                className="h-8 w-8 rounded-full md:h-9 md:w-9"
+                aria-label="Create group"
+                title="Create group"
+              >
+                <Users size={15} />
+              </Button>
+              {createGroupOpen && (
+                <div className="absolute right-0 top-[calc(100%+0.55rem)] z-[500] w-[min(18rem,calc(100vw-1rem))] rounded-[1.35rem] border border-[var(--border-soft)] bg-[color:color-mix(in_srgb,var(--panel)_92%,transparent)] p-3 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur-2xl">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-widest">Create Group</p>
+                    <button type="button" onClick={() => setCreateGroupOpen(false)} className="rounded-full p-0.5 hover:bg-[var(--panel-soft)]"><X size={13} /></button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && groupName.trim().length >= 2) { handleCreateGroup(groupName); setGroupName(''); setCreateGroupOpen(false); } }}
+                      placeholder="Group name"
+                      className="min-w-0 flex-1 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)] focus:border-emerald-500/50"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={loading || groupName.trim().length < 2}
+                      onClick={() => { handleCreateGroup(groupName); setGroupName(''); setCreateGroupOpen(false); }}
+                      className="shrink-0 rounded-xl px-2.5 py-1.5 text-xs"
+                    >
+                      <Plus size={13} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Join Group popover */}
+            <div className="relative" ref={joinGroupRef}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                onClick={() => { setJoinGroupOpen((v) => !v); setCreateGroupOpen(false); }}
+                className="h-8 w-8 rounded-full md:h-9 md:w-9"
+                aria-label="Join group"
+                title="Join group"
+              >
+                <UserPlus size={15} />
+              </Button>
+              {joinGroupOpen && (
+                <div className="absolute right-0 top-[calc(100%+0.55rem)] z-[500] w-[min(18rem,calc(100vw-1rem))] rounded-[1.35rem] border border-[var(--border-soft)] bg-[color:color-mix(in_srgb,var(--panel)_92%,transparent)] p-3 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur-2xl">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-widest">Join Group</p>
+                    <button type="button" onClick={() => setJoinGroupOpen(false)} className="rounded-full p-0.5 hover:bg-[var(--panel-soft)]"><X size={13} /></button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={joinGroupId}
+                      onChange={(e) => setJoinGroupId(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && joinGroupId.trim().length >= 8) { handleJoinGroup(joinGroupId); setJoinGroupId(''); setJoinGroupOpen(false); } }}
+                      placeholder="Group ID or link"
+                      className="min-w-0 flex-1 rounded-xl border border-[var(--border-soft)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)] focus:border-emerald-500/50"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={loading || joinGroupId.trim().length < 8}
+                      onClick={() => { handleJoinGroup(joinGroupId); setJoinGroupId(''); setJoinGroupOpen(false); }}
+                      className="shrink-0 rounded-xl px-2.5 py-1.5 text-xs"
+                    >
+                      <Plus size={13} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {isAdmin ? (
               <Button
                 type="button"

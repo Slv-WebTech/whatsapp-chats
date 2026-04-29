@@ -1301,6 +1301,7 @@ select:focus-visible {
     color: rgba(203, 213, 225, 0.66);
 }
 
+[data-chat-mode='casual'],
 [data-chat-mode='romantic'] {
     --page-bg: #f8f2f4;
     --page-glow-a: rgba(190, 138, 158, 0.14);
@@ -1312,6 +1313,7 @@ select:focus-visible {
     --date-chip: rgba(240, 223, 230, 0.9);
 }
 
+[data-theme='dark'][data-chat-mode='casual'],
 [data-theme='dark'][data-chat-mode='romantic'] {
     --page-bg: #1d171c;
     --page-glow-a: rgba(152, 110, 128, 0.14);
@@ -1323,6 +1325,7 @@ select:focus-visible {
     --date-chip: rgba(74, 55, 66, 0.9);
 }
 
+[data-chat-mode='professional'],
 [data-chat-mode='formal'] {
     --page-bg: #edf4f8;
     --page-glow-a: rgba(82, 143, 175, 0.16);
@@ -1334,6 +1337,7 @@ select:focus-visible {
     --date-chip: rgba(211, 230, 242, 0.9);
 }
 
+[data-theme='dark'][data-chat-mode='professional'],
 [data-theme='dark'][data-chat-mode='formal'] {
     --page-bg: #0b1a24;
     --page-glow-a: rgba(63, 124, 156, 0.2);
@@ -1345,18 +1349,22 @@ select:focus-visible {
     --date-chip: rgba(24, 54, 72, 0.9);
 }
 
+[data-chat-mode='casual'] .chat-wallpaper,
 [data-chat-mode='romantic'] .chat-wallpaper {
     background-color: #f4e2ea;
 }
 
+[data-theme='dark'][data-chat-mode='casual'] .chat-wallpaper,
 [data-theme='dark'][data-chat-mode='romantic'] .chat-wallpaper {
     background-color: #2a1321;
 }
 
+[data-chat-mode='professional'] .chat-wallpaper,
 [data-chat-mode='formal'] .chat-wallpaper {
     background-color: #dcecf5;
 }
 
+[data-theme='dark'][data-chat-mode='professional'] .chat-wallpaper,
 [data-theme='dark'][data-chat-mode='formal'] .chat-wallpaper {
     background-color: #0f2533;
 }

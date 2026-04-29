@@ -41,7 +41,7 @@ function SettingsPanel({
         return `${safeValue.charAt(0).toUpperCase()}${safeValue.slice(1)}`;
     };
     const isTheme = section === 'theme';
-    const isAppearance = section === 'appearance';
+    const isAppearance = section === 'appearance' || section === 'appreance';
     const isParticipants = section === 'participants';
     const isExport = section === 'export';
     const USERNAME_PATTERN = /^[A-Z][A-Za-z0-9_]{2,19}$/;
@@ -59,10 +59,20 @@ function SettingsPanel({
     useEffect(() => {
         setUsernameDraft(normalizedUsername);
     }, [normalizedUsername]);
-    // Filter by both chatMode and theme mode (light/dark)
-    const modeFilteredBackgrounds = backgroundOptions.filter(
-        (item) => !item.chatMode || item.chatMode === chatMode
-    );
+    // Keep compatibility between legacy values (formal/romantic) and current values (professional/casual).
+    const normalizedChatMode = chatMode === 'professional'
+        ? 'formal'
+        : chatMode === 'casual'
+            ? 'romantic'
+            : chatMode;
+
+    // Filter by both chat mode and theme mode (light/dark).
+    const modeFilteredBackgrounds = backgroundOptions.filter((item) => {
+        if (!item.chatMode) {
+            return true;
+        }
+        return item.chatMode === chatMode || item.chatMode === normalizedChatMode;
+    });
     const lightBackgroundOptions = modeFilteredBackgrounds.filter((item) => item.mode === 'light');
     const darkBackgroundOptions = modeFilteredBackgrounds.filter((item) => item.mode === 'dark');
 

@@ -120,7 +120,6 @@ export function pickBackgroundTone({ chatMode, resolvedTheme, selectedBackground
         /night|midnight|dark|moon|silhouette/.test(normalized);
     const isRomanticBackground =
         normalizedChatMode === 'casual' ||
-        normalizedChatMode === 'romantic' ||
         /romantic|love|heart|pink|valentine|rose|couple/.test(normalized);
 
     if (isRomanticBackground && isDarkBackground) {
