@@ -8,6 +8,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "worker": "node worker/index.js",
+    "worker:dev": "node --watch worker/index.js",
+    "smoke:infra": "node scripts/smoke-infra.mjs",
+    "verify:prod": "npm run build && npm run smoke:infra",
     "migrate:group-approval:dry": "node scripts/normalize-group-approval.cjs --dry-run",
     "migrate:group-approval": "node scripts/normalize-group-approval.cjs"
   },
